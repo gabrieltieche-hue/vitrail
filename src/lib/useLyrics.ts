@@ -130,6 +130,7 @@ export function useLyrics(track: Track | null): LyricsState {
             setState({ status: "ready", lyrics })
             return
           }
+          // Un transcript vide n'est pas exploitable : on redemande.
         }
 
         // Pas encore transcrite : on lance le calcul en tâche de fond.

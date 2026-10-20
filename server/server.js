@@ -27,7 +27,24 @@ const DIST_DIR = process.env.VITRAIL_DIST || "/root/vitrail/dist"
 const WHISPER_BIN = process.env.VITRAIL_WHISPER || "/root/whisper.cpp/build/bin/whisper-cli"
 const WHISPER_MODEL = process.env.VITRAIL_MODEL || "/root/models/ggml-base.bin"
 const WHISPER_LIB_DIR = path.dirname(WHISPER_BIN)
-const WHISPER_THREADS = Number(process.env.VITRAIL_THREADS || 6)
+const WHISPER_THREADS = Number(process.env.VITRAIL_THREADS || 2)
+/** Blocs traités en parallèle. */
+const CONCURRENCY = Number(process.env.VITRAIL_CONCURRENCY || 4)
+
+/** Exécute `task` sur chaque élément, au plus `limit` à la fois. */
+async function mapWithConcurrency(items, limit, task) {
+  const results = new Array(items.length)
+  let cursor = 0
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor
+      cursor += 1
+      results[index] = await task(items[index], index)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
 const FFMPEG = "ffmpeg"
 
 const LIB_DIR = path.join(DATA_DIR, "library")
@@ -179,7 +196,10 @@ async function splitIntoChunks(wavPath) {
   for (let start = 0; ; start += CHUNK_STEP) {
     const output = path.join(directory, `c${String(chunks.length).padStart(3, "0")}.wav`)
     const code = await runFfmpegExtract(wavPath, output, start, CHUNK_LENGTH)
-    if (code !== 0) break
+    if (code !== 0) {
+      console.error(`[vitrail] extraction du bloc ${start}s : ffmpeg a renvoyé ${code}`)
+      break
+    }
     const stat = await fsp.stat(output).catch(() => null)
     if (!stat || stat.size < 1000) {
       await fsp.unlink(output).catch(() => {})
@@ -193,16 +213,42 @@ async function splitIntoChunks(wavPath) {
   return { chunks, directory }
 }
 
+/**
+ * Durée d'un WAV, en parcourant les chunks.
+ *
+ * ffmpeg insère un chunk LIST (métadonnées) avant le chunk data : la taille
+ * des données n'est donc PAS à l'octet 40. Une lecture à l'offset fixe
+ * renvoyait 160 octets au lieu de 6 Mo — et le découpage en blocs s'arrêtait
+ * au premier.
+ */
 function durationOf(file) {
+  let header
   try {
-    const buffer = fs.readFileSync(file)
-    // En-tête RIFF : taille des données à l'octet 40, taille d'un échantillon 16 bits.
-    const byteRate = buffer.readUInt32LE(28)
-    const dataSize = buffer.readUInt32LE(40)
-    return byteRate > 0 ? dataSize / byteRate : 0
+    const fd = fs.openSync(file, "r")
+    header = Buffer.alloc(2048)
+    fs.readSync(fd, header, 0, header.length, 0)
+    fs.closeSync(fd)
   } catch {
     return 0
   }
+  if (header.toString("ascii", 0, 4) !== "RIFF") return 0
+
+  let offset = 12
+  let byteRate = 0
+  let dataSize = 0
+  while (offset + 8 <= header.length) {
+    const id = header.toString("ascii", offset, offset + 4)
+    const size = header.readUInt32LE(offset + 4)
+    if (id === "fmt ") {
+      byteRate = header.readUInt32LE(offset + 16)
+    } else if (id === "data") {
+      dataSize = size
+      break
+    }
+    // Les chunks sont alignés sur des mots de 2 octets.
+    offset += 8 + size + (size % 2)
+  }
+  return byteRate > 0 ? dataSize / byteRate : 0
 }
 
 function runFfmpegExtract(input, output, start, length) {
@@ -232,7 +278,7 @@ function runFfmpegExtract(input, output, start, length) {
 }
 
 /** Lance whisper.cpp sur un bloc et renvoie les mots (un segment par mot). */
-function runWhisper(wavPath, language) {
+function runWhisper(wavPath, language, threads) {
   return new Promise((resolve, reject) => {
     const outBase = wavPath.replace(/\.wav$/, "")
     const args = [
@@ -248,11 +294,11 @@ function runWhisper(wavPath, language) {
       outBase,
       "-nt",
       "-t",
-      String(WHISPER_THREADS),
-      // Décodage glouton : 3 à 5 fois plus rapide que la recherche à 5
-      // faisceaux, et le texte est meilleur sur les voix chantées.
-      "-bs",
-      "1",
+      String(threads || WHISPER_THREADS),
+      // « best of 1 » : pas d'échantillonnage, on garde la recherche à
+      // faisceaux (qui produit des horodatages justes). Surtout, ne PAS
+      // utiliser -bs 1 : le décodage glouton décale tous les horodatages
+      // d'une valeur négative (−979 s observés), ce qui casse la synchro.
       "-bo",
       "1",
     ]
@@ -383,19 +429,30 @@ async function transcribeBuffer(source, id, language) {
     const all = []
     let lastEnd = -1
 
-    for (const chunk of chunks) {
-      let raw = []
+    // Les blocs sont traités en parallèle : sur ce CPU (8 cœurs), whisper
+    // sur un seul bloc n'exploite pas tous les cœurs, et trois blocs à deux
+    // threads vont plus vite qu'un bloc à six threads, en série.
+    const results = await mapWithConcurrency(chunks, CONCURRENCY, async chunk => {
       try {
-        raw = await runWhisper(chunk.path, useLanguage)
+        const raw = await runWhisper(chunk.path, useLanguage, WHISPER_THREADS)
+        return { chunk, words: dropHallucinations(raw) }
       } catch (error) {
-        console.error(`[vitrail] bloc ${chunk.start}s :`, error instanceof Error ? error.message : error)
-        continue
+        console.error(
+          `[vitrail] bloc ${chunk.start}s :`,
+          error instanceof Error ? error.message : error,
+        )
+        return { chunk, words: [] }
       }
-      if (raw.length === 0) {
-        console.error(`[vitrail] bloc ${chunk.start}s : aucune sortie de whisper`)
-      }
-      const words = dropHallucinations(raw)
+    })
+
+    for (const { chunk, words } of results) {
       for (const word of words) {
+        // Garde-fou : whisper peut renvoyer des horodatages négatifs ou
+        // aberrants. Un mot sans position exploitable est écarté plutôt que
+        // mal synchronisé.
+        if (!Number.isFinite(word.start) || !Number.isFinite(word.end)) continue
+        if (word.start < 0 || word.end < 0) continue
+        if (word.end > CHUNK_LENGTH + 2) continue
         const absolute = {
           start: chunk.start + word.start,
           end: chunk.start + word.end,
@@ -605,7 +662,7 @@ const server = http.createServer(async (req, res) => {
           return
         }
         const existing = readJson(path.join(TRANSCRIPT_DIR, `${hash}.json`), null)
-        if (existing) {
+        if (existing && Array.isArray(existing.lines) && existing.lines.length > 0) {
           json(res, 200, { ...existing, cached: true })
           return
         }
@@ -622,9 +679,18 @@ const server = http.createServer(async (req, res) => {
         const language = meta.language || "auto"
         transcribeBuffer(source, hash, language)
           .then(transcript => {
+            if (!transcript.lines.length) {
+              // Un transcript vide ne doit pas être mis en cache : le
+              // navigateur le récupérerait définitivement, sans paroles.
+              console.error(`[vitrail] transcription ${hash} : aucun texte reconnu`)
+              return
+            }
             fs.writeFileSync(path.join(TRANSCRIPT_DIR, `${hash}.json`), JSON.stringify(transcript))
+            console.log(`[vitrail] transcription ${hash} terminée (${transcript.lines.length} lignes)`)
           })
-          .catch(() => undefined)
+          .catch(error => {
+            console.error(`[vitrail] transcription ${hash} échouée :`, error)
+          })
           .finally(() => {
             fs.unlink(source, () => undefined)
           })
