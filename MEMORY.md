@@ -75,6 +75,73 @@ file famille en v2 via playlist collaborative Spotify.
 
 ### Suite
 
+1. Capsules d'écriture (historique persistant, top artistes/albums).
+2. Connecteur Spotify PKCE + Web Playback SDK, avec bascule lecteur/télécommande.
+3. File famille (playlist collaborative rafraîchie).
+4. Déploiement Vercel + installation de la PWA sur la tablette.
+
+---
+
+## SESSION — 2026-10-20 (v0.2 : bibliothèque personnelle)
+
+### Résumé
+
+Ajout de **la musique de l'utilisateur** dans l'app, à la demande explicite :
+« est-ce que je peux télécharger des musiques moi-mêmes et les rendre disponibles
+sur mon app ? ». Réponse : oui, implémenté.
+
+Deux entrées dans « Ma musique » :
+- **Import** (sélection multiple) — le fichier est copié dans **IndexedDB**
+  (`localStorage` est plafonné à ~5 Mo et n'accepte que des chaînes).
+- **Dossier en direct** — File System Access API (`showDirectoryPicker`) : les
+  fichiers sont lus sur place, sans duplication. Chrome uniquement ; le bouton
+  n'apparaît pas sur Firefox.
+
+Un **parseur ID3v2 maison** (sans dépendance) lit titre, artiste, album, année,
+numéro de piste, **pochette (APIC)** et **paroles (USLT)**. Les fichiers non-MP3
+retombent sur le nom de fichier (« Artiste - Titre »).
+
+Bonus découvert en route : les fichiers de l'utilisateur contiennent souvent
+des paroles intégrées (trame `USLT`). Elles sont utilisées **en priorité**,
+sans appel à LRCLIB — le lecteur affiche donc les paroles de vos propres
+fichiers, non synchronisées.
+
+### Décisions
+
+- **IndexedDB, pas localStorage** : les blobs audio n'y ont pas leur place.
+- **Lecture des URL `blob:`** : elles meurent au rechargement, donc la file
+  persistée contenait des sources mortes. Ajout de `player.syncLocalTracks()`,
+  appelé à chaque relecture de la bibliothèque.
+- **Import ≠ partage** : chaque appareil importe ses propres fichiers. Le
+  partage familial reste porté par la playlist collaborative Spotify. L'app ne
+  redistribue rien.
+- **Relance automatique du flux** : archive.org répond 500 par intermittence
+  (≈ 1 sur 10). Le lecteur réessaie 3 fois avec un paramètre anti-cache.
+
+### Vérifications
+
+- Import d'un vrai fichier de la tablette (`/sdcard/Download/Mirage.mp3`) :
+  ID3 relu octet par octet en Python et comparé au résultat du parseur JS
+  → `TIT2 = "Mirage"`, `TPE1 = "gabriel_tieche"` : **identiques**.
+- Lecture du fichier importé : `paused: false`, `currentTime` en avance,
+  `readyState: 4`, `duration: 186.4 s`, source `blob:` — **aucune erreur**.
+- Pochette extraite du fichier affichée en plein écran, paroles intégrées
+  visibles dans le lecteur (« [Intro] / Ouais… / [Verse 1] … »).
+- Stockage : « 4,3 Mo utilisés sur 10 Go disponibles ».
+
+### Bugs trouvés et corrigés
+
+7. **Erreur audio fantôme** (déjà listée) : l'interface affichait « Lecture
+   impossible » sur un son qui jouait.
+8. **URL `blob:` mortes** après rechargement → `syncLocalTracks()`.
+9. **Clic sur un morceau local** ne'ouvrait pas l'écran de lecture → callback
+   `onPlay` propagé jusqu'à `LocalLibrary`.
+10. **Autoplay headless** : un clic scripté n'est pas un geste utilisateur,
+    Firefox bloque la lecture → `media.autoplay.default = 0` dans les tests
+    (c'était un artefact de test, pas un bug produit).
+
+### Suite
+
 1. Capsules d'écoute (historique persistant, top artistes/albums).
 2. Connecteur Spotify PKCE + Web Playback SDK, avec bascule lecteur/télécommande.
 3. File famille (playlist collaborative rafraîchie).

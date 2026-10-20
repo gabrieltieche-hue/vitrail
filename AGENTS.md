@@ -42,9 +42,24 @@ v0.1 — lecteur fonctionnel en mode démonstration.
   streamé depuis archive.org. **Fichier généré**, ne pas éditer à la main.
 - `src/lib/lyrics.ts` : client LRCLIB + cache 30 jours (`vitrail_lyrics_v1`).
 - `src/lib/lrc.ts` : parseur LRC (ligne + mot à mot).
+- `src/lib/id3.ts` : lecture des balises ID3v2 (titre, artiste, album,
+  pochette APIC, paroles USLT) + repli sur le nom de fichier.
+- `src/lib/localLibrary.ts` : IndexedDB — import des fichiers personnels.
+- `src/lib/useLocalLibrary.ts` : hook de la bibliothèque personnelle.
 - `src/lib/lyricsIndex.ts` : index des morceaux ayant des paroles. **Généré**.
-- `src/components/` : `NowPlaying`, `Lyrics`, `Library`, `Queue`, `MiniPlayer`,
-  `Artwork`, `Backdrop`, `ProgressBar`.
+- `src/components/` : `NowPlaying`, `Lyrics`, `Library`, `LocalLibrary`,
+  `Queue`, `MiniPlayer`, `Artwork`, `Backdrop`, `ProgressBar`.
+
+### Bibliothèque personnelle
+
+Import de fichiers dans IndexedDB (bouton « Importer des fichiers ») ou lecture
+d'un dossier en place (bouton « Choisir un dossier », File System Access API,
+Chrome uniquement). Titre, artiste, album, pochette et paroles sont lus dans
+les balises du fichier.
+
+Vérification : `python3.13 scripts/test-local-import.py` (importe
+`/mnt/sdcard/Download/Mirage.mp3`, vérifie la lecture et l'affichage des
+paroles intégrées).
 
 ### Régénérer les fichiers générés
 
@@ -91,6 +106,19 @@ archive.org sont dans `/tmp/jw-meta.json` — **à re-fetcher si absent**).
 6. **Playwright pip : impossible** (pas de wheel linux-aarch64). Selenium +
    `geckodriver` + Firefox headless fonctionne
    (`/tmp/opencode/geckodriver`, `/tmp/opencode/firefox/firefox`).
+7. **Erreur audio fantôme.** Firefox émet `MEDIA_ERR_DECODE` alors que la
+   lecture est nominale. Ne retenir l'erreur que si
+   `readyState < HAVE_CURRENT_DATA`, et la réinitialiser sur `playing`.
+8. **archive.org répond 500 par intermittence** (≈ 1 requête sur 10). Le
+   lecteur relance jusqu'à 3 fois avec un paramètre `vitr=<timestamp>` qui
+   passe d'un edge en cache défectueux. Sans ça, l'utilisateur voit
+   « Morceau indisponible » sur un flux parfaitement bon.
+9. **URL `blob:` volatiles.** Elles meurent au rechargement : la file
+   persistée en `localStorage` contenait des sources mortes. Resynchroniser via
+   `player.syncLocalTracks()` à chaque relecture de la bibliothèque.
+10. **Autoplay headless.** Un clic Selenium scripté n'est pas un « geste
+    utilisateur » : Firefox bloque la lecture. Passer
+    `media.autoplay.default = 0` dans les tests.
 
 ---
 

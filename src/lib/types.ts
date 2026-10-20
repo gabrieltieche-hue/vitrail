@@ -9,6 +9,8 @@ export type Track = {
   audio: string
   sourceUrl?: string
   license?: string
+  /** Paroles intégrées au fichier (import personnel). */
+  embeddedLyrics?: string
 }
 
 export type WordTiming = {

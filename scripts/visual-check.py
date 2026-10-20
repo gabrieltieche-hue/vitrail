@@ -9,7 +9,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 
-BASE = "http://127.0.0.1:4199/"
+BASE = sys.argv[2] if len(sys.argv) > 2 else "http://127.0.0.1:4199/"
 OUT = Path("/tmp/opencode")
 OUT.mkdir(parents=True, exist_ok=True)
 

@@ -27,23 +27,46 @@ Vitrail est une application web de musique, pensée pour un usage **familial** :
 ```
 src/
   audio/player.ts        moteur de lecture (HTMLAudioElement) + file + état
-  components/            Backdrop, Artwork, NowPlaying, Lyrics, Queue, Library…
+  components/            Backdrop, Artwork, NowPlaying, Lyrics, Queue, Library,
+                         LocalLibrary, MiniPlayer, ProgressBar
   lib/
     demoCatalog.ts       53 morceaux libres (généré)
     lyrics.ts            client LRCLIB + cache local 30 jours
     lyricsIndex.ts       index des morceaux ayant des paroles (généré)
     lrc.ts               parseur LRC (ligne + mot à mot)
+    id3.ts               lecture des balises ID3v2 (titres, pochette, paroles)
+    localLibrary.ts      IndexedDB : import des fichiers personnels
+    useLocalLibrary.ts   hook de la bibliothèque personnelle
     types.ts             types partagés
 App.tsx                  coquille : navigation, raccourcis clavier
 ```
 
 - **Aucun serveur.** Le state du lecteur vit dans `localStorage`
   (clé `vitrail_v1_state`), les paroles sont mises en cache (clé
-  `vitrail_lyrics_v1`).
-- **Source audio, deux modes, une seule interface :**
-  - `demo` — morceaux Creative Commons streamés depuis archive.org,jouables
+  `vitrail_lyrics_v1`), les fichiers personnels dans **IndexedDB**.
+- **Source audio, trois modes, une seule interface :**
+  - `demo` — morceaux Creative Commons streamés depuis archive.org, jouables
     sans aucun abonnement. Sert de terrain d'essai avant abonnement.
-  - `spotify` — à brancher quand l'abonnement est actif (voir §4).
+  - `local` — **tes propres fichiers**, importés dans l'app (IndexedDB).
+  - `spotify` — à brancher quand l'abonnement est actif (voir §5).
+
+### Ta propre musique
+
+Deux entrées, dans « Ma musique » :
+
+- **Importer des fichiers** — sélection multiple. Le contenu est copié dans
+  IndexedDB ; titre, artiste, album, pochette et paroles sont lus dans les
+  balises ID3 du fichier (et non depuis le nom de fichier).
+- **Choisir un dossier** — File System Access API (Chrome uniquement) : les
+  fichiers sont lus sur place, sans duplication. Le bouton n'apparaît que si
+  le navigateur expose `showDirectoryPicker`.
+
+Les URL `blob:` des fichiers importés meurent au rechargement : la file est
+donc resynchronisée à chaque relecture de la bibliothèque
+(`player.syncLocalTracks`).
+
+Les paroles intégrées au fichier (trame ID3 `USLT`) sont utilisées en
+priorité, sans appel à LRCLIB.
 
 ---
 

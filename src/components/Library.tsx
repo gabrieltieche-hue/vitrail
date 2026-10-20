@@ -4,6 +4,7 @@ import { clsx } from "clsx"
 import { player, usePlayer } from "@/audio/player"
 import { Artwork } from "@/components/Artwork"
 import { DEMO_ATTRIBUTION, DEMO_TRACKS } from "@/lib/demoCatalog"
+import { LocalLibrary } from "@/components/LocalLibrary"
 import { formatTime } from "@/lib/format"
 import type { Track } from "@/lib/types"
 
@@ -69,6 +70,8 @@ export function Library({ lyricsIds, onPlay }: LibraryProps) {
       </header>
 
       {current ? <ResumeCard lyricsIds={lyricsIds} /> : null}
+
+      <LocalLibrary onPlay={onPlay} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between px-1">

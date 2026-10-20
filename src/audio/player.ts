@@ -46,6 +46,8 @@ class PlayerEngine {
   private listeners = new Set<() => void>()
   private audio: HTMLAudioElement | null = null
   private history: number[] = []
+  private retryCount = 0
+  private retryTimer: number | null = null
 
   constructor() {
     this.restore()
@@ -110,7 +112,10 @@ class PlayerEngine {
     audio.addEventListener("play", () => this.emit({ playing: true, error: null }))
     audio.addEventListener("pause", () => this.emit({ playing: false }))
     audio.addEventListener("waiting", () => this.emit({ loading: true }))
-    audio.addEventListener("playing", () => this.emit({ loading: false, error: null }))
+    audio.addEventListener("playing", () => {
+      this.retryCount = 0
+      this.emit({ loading: false, error: null })
+    })
     audio.addEventListener("canplay", () => this.emit({ loading: false }))
     audio.addEventListener("loadedmetadata", () => {
       const duration = Number.isFinite(audio.duration) ? audio.duration : 0
@@ -122,21 +127,7 @@ class PlayerEngine {
     })
     audio.addEventListener("timeupdate", () => this.emit({ time: audio.currentTime, loading: false }))
     audio.addEventListener("ended", () => this.handleEnded())
-    audio.addEventListener("error", () => {
-      const code = audio.error?.code
-      // Firefox laisse parfois un MEDIA_ERR_DECODE fantôme alors que la
-      // lecture continue (readyState >= 2). On ne l'affiche que si le média
-      // est réellement inutilisable.
-      if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-        this.emit({ loading: false })
-        return
-      }
-      this.emit({
-        playing: false,
-        loading: false,
-        error: code === 4 ? "Morceau indisponible" : "Lecture impossible",
-      })
-    })
+    audio.addEventListener("error", () => this.handleError())
 
     this.audio = audio
     return audio
@@ -170,12 +161,49 @@ class PlayerEngine {
       return
     }
     if (audio.src !== track.audio) {
+      this.retryCount = 0
       audio.src = track.audio
       audio.load()
       this.emit({ time: 0, duration: track.durationSec ?? 0, error: null, loading: true })
     }
     if (autoplay) this.startPlayback()
     else this.emit({ playing: false })
+  }
+
+  private handleError(): void {
+    const audio = this.element()
+    const code = audio.error?.code
+
+    // Firefox laisse parfois un MEDIA_ERR_DECODE fantôme alors que la lecture
+    // continue (readyState >= 2). On ne l'affiche que si le média est
+    // réellement inutilisable.
+    if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      this.emit({ loading: false })
+      return
+    }
+
+    // archive.org répond parfois 500 sur un flux : on relance avec une URL
+    // légèrement différente pour passer d'un edge en cache défectueux.
+    const track = this.current()
+    if (track && this.retryCount < 3 && !track.audio.startsWith("blob:")) {
+      this.retryCount += 1
+      this.emit({ loading: true, error: null })
+      if (this.retryTimer !== null) window.clearTimeout(this.retryTimer)
+      this.retryTimer = window.setTimeout(() => {
+        this.retryTimer = null
+        const separator = track.audio.includes("?") ? "&" : "?"
+        audio.src = `${track.audio}${separator}vitr=${Date.now()}`
+        audio.load()
+        this.startPlayback()
+      }, 700 * this.retryCount)
+      return
+    }
+
+    this.emit({
+      playing: false,
+      loading: false,
+      error: code === 4 ? "Morceau indisponible" : "Lecture impossible",
+    })
   }
 
   private handleEnded(): void {
@@ -364,6 +392,32 @@ class PlayerEngine {
   clearQueue(): void {
     this.element().pause()
     this.emit({ queue: [], index: -1, playing: false, time: 0, duration: 0, contextLabel: null })
+    this.persist()
+  }
+
+  /**
+   * Les URL `blob:` des fichiers importés ne survivent pas à un rechargement.
+   * À chaque relecture de la bibliothèque locale, on réinjecte les URL
+   * fraîches dans la file pour ne pas laisser de sources mortes.
+   */
+  syncLocalTracks(tracks: Track[]): void {
+    if (tracks.length === 0) return
+    const byId = new Map(tracks.map(track => [track.id, track]))
+    let changed = false
+    const queue = this.state.queue.map(track => {
+      const fresh = byId.get(track.id)
+      if (!fresh) return track
+      if (track.audio === fresh.audio && track.artwork === fresh.artwork) return track
+      changed = true
+      return {
+        ...track,
+        audio: fresh.audio,
+        artwork: fresh.artwork,
+        ...(fresh.embeddedLyrics ? { embeddedLyrics: fresh.embeddedLyrics } : {}),
+      }
+    })
+    if (!changed) return
+    this.emit({ queue })
     this.persist()
   }
 }
