@@ -8,6 +8,7 @@ type ArtworkProps = {
   size?: "sm" | "md" | "lg" | "xl" | "none"
   className?: string
   rounded?: "md" | "xl" | "2xl" | "3xl"
+  eager?: boolean
 }
 
 const sizes = {
@@ -25,7 +26,7 @@ const radii = {
   "3xl": "rounded-[2rem]",
 } as const
 
-export function Artwork({ src, alt, size = "md", className, rounded = "xl" }: ArtworkProps) {
+export function Artwork({ src, alt, size = "md", className, rounded = "xl", eager = false }: ArtworkProps) {
   const [failed, setFailed] = useState(false)
 
   return (
@@ -46,7 +47,8 @@ export function Artwork({ src, alt, size = "md", className, rounded = "xl" }: Ar
           src={src}
           alt={alt}
           draggable={false}
-          loading="lazy"
+          loading={eager ? "eager" : "lazy"}
+          decoding="async"
           onError={() => setFailed(true)}
           className="h-full w-full object-cover"
         />

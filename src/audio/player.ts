@@ -107,22 +107,30 @@ class PlayerEngine {
     audio.preload = "metadata"
     audio.volume = this.state.volume
 
-    audio.addEventListener("timeupdate", () => this.emit({ time: audio.currentTime, loading: false }))
-    audio.addEventListener("durationchange", () => {
-      const duration = Number.isFinite(audio.duration) ? audio.duration : 0
-      this.emit({ duration })
-    })
+    audio.addEventListener("play", () => this.emit({ playing: true, error: null }))
+    audio.addEventListener("pause", () => this.emit({ playing: false }))
+    audio.addEventListener("waiting", () => this.emit({ loading: true }))
+    audio.addEventListener("playing", () => this.emit({ loading: false, error: null }))
+    audio.addEventListener("canplay", () => this.emit({ loading: false }))
     audio.addEventListener("loadedmetadata", () => {
       const duration = Number.isFinite(audio.duration) ? audio.duration : 0
       this.emit({ duration, loading: false })
     })
-    audio.addEventListener("play", () => this.emit({ playing: true, error: null }))
-    audio.addEventListener("pause", () => this.emit({ playing: false }))
-    audio.addEventListener("waiting", () => this.emit({ loading: true }))
-    audio.addEventListener("playing", () => this.emit({ loading: false }))
+    audio.addEventListener("durationchange", () => {
+      const duration = Number.isFinite(audio.duration) ? audio.duration : 0
+      this.emit({ duration })
+    })
+    audio.addEventListener("timeupdate", () => this.emit({ time: audio.currentTime, loading: false }))
     audio.addEventListener("ended", () => this.handleEnded())
     audio.addEventListener("error", () => {
       const code = audio.error?.code
+      // Firefox laisse parfois un MEDIA_ERR_DECODE fantôme alors que la
+      // lecture continue (readyState >= 2). On ne l'affiche que si le média
+      // est réellement inutilisable.
+      if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        this.emit({ loading: false })
+        return
+      }
       this.emit({
         playing: false,
         loading: false,

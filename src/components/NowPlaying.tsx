@@ -101,6 +101,7 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
                   alt={`Pochette de ${track.album}`}
                   size="none"
                   rounded="3xl"
+                  eager
                   className="glass-sheen h-full w-full shadow-[0_50px_120px_-40px_rgba(0,0,0,0.95)]"
                 />
               </div>

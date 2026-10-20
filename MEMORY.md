@@ -64,13 +64,18 @@ file famille en v2 via playlist collaborative Spotify.
    Catalogue ramené de 65 à 53 morceaux.
 5. **File d'attente translucide** : le `backdrop-blur` de Firefox laissait
    passer les paroles du lecteur malgré 96 % d'opacité → fond 100 % opaque.
-6. **Audio sans retour d'erreur** : `audio.error.code` vaut 3 (decode) alors
-   que la lecture est nominale — l'état d'erreur est désormais affiché dans
-   l'interface plutôt que silencieux.
+6. **Erreur audio fantôme** : Firefox émet `MEDIA_ERR_DECODE` (code 3) alors
+   que la lecture est nominale (`readyState: 4`, `currentTime` en marche).
+   L'interface affichait « Lecture impossible » sur un son qui jouait.
+   → l'erreur n'est retenue que si `readyState < HAVE_CURRENT_DATA`, et
+   l'événement `playing` la réinitialise.
+7. **Pochette en bandes** : `<img loading="lazy">` laissait Firefox décoder le
+   JPEG par bandes (image tronquée horizontalement). → `eager` + `decoding="async"`
+   sur la pochette du lecteur.
 
 ### Suite
 
 1. Capsules d'écoute (historique persistant, top artistes/albums).
 2. Connecteur Spotify PKCE + Web Playback SDK, avec bascule lecteur/télécommande.
 3. File famille (playlist collaborative rafraîchie).
-4. PWA installable sur la tablette.
+4. Déploiement Vercel + installation de la PWA sur la tablette.
