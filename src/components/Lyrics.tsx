@@ -47,11 +47,12 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
   if (state.status === "transcribing") {
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 px-8 text-center", className)}>
-        <span className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-white/70" />
-        <p className="font-display text-xl text-ink/75">Paroles en cours de calcul</p>
-        <p className="max-w-xs text-sm leading-relaxed text-ink/35">
-          Ce morceau n&apos;est pas dans les bases de paroles connues. L&apos;app le transcrit sur cet
-          appareil — les paroles s&apos;afficheront ici dès que c&apos;est prêt.
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-ink/70" />
+        <p className="font-display text-xl text-ink/80">Paroles en cours de calcul</p>
+        <p className="max-w-xs text-sm leading-relaxed text-ink/40">
+          Ce morceau n&apos;est dans aucune base de paroles connue. L&apos;app le transcrit sur cet
+          appareil — quelques minutes, une seule fois. Les paroles resteront ensuite disponibles
+          pour toute la famille.
         </p>
       </div>
     )

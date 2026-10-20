@@ -59,7 +59,7 @@ try:
     driver.save_screenshot(str(OUT / "trans-1-debut.png"))
 
     found = False
-    for i in range(100):
+    for i in range(130):
         time.sleep(5)
         text = lyrics_panel_text().lower()
         if "cours de calcul" in text:
