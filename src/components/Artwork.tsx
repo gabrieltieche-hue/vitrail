@@ -32,15 +32,15 @@ export function Artwork({ src, alt, size = "md", className, rounded = "xl", eage
   return (
     <div
       className={clsx(
-        "relative overflow-hidden bg-ink-800",
+        "relative overflow-hidden bg-ink/10",
         sizes[size],
         radii[rounded],
         className,
       )}
     >
       {failed || !src ? (
-        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-white/12 via-white/5 to-transparent">
-          <Music2 className="h-1/3 w-1/3 text-white/35" strokeWidth={1.5} />
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-ink/10 via-ink/5 to-transparent">
+          <Music2 className="h-1/3 w-1/3 text-ink/35" strokeWidth={1.5} />
         </div>
       ) : (
         <img

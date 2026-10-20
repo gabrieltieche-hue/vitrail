@@ -61,14 +61,14 @@ export function ProgressBar({ value, max, onSeek, className, disabled }: Progres
         className,
       )}
     >
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/15">
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-ink/15">
         <div
-          className="absolute inset-y-0 left-0 rounded-full bg-white"
+          className="absolute inset-y-0 left-0 rounded-full bg-ink"
           style={{ width: `${progress}%`, transition: dragValue === null ? "width 180ms linear" : "none" }}
         />
       </div>
       <div
-        className="absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+        className="absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-ink opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
         style={{ left: `${progress}%`, opacity: dragValue === null ? undefined : 1 }}
       />
     </div>

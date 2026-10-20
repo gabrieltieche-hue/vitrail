@@ -50,7 +50,7 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0.4 }}
           transition={{ type: "spring", stiffness: 300, damping: 32 }}
-          className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-ink-950"
+          className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-canvas"
         >
           {/* Lumière de la pochette : c'est la signature « vitrail ». */}
           <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -59,7 +59,7 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
               alt=""
               className="breathe absolute left-1/2 top-1/3 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 scale-[5] object-cover opacity-45 blur-3xl saturate-160"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-ink-950/55 via-ink-950/80 to-ink-950" />
+            <div className="absolute inset-0 bg-gradient-to-b from-canvas/55 via-canvas/80 to-canvas" />
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(0,0,0,0.7)_100%)]" />
           </div>
 
@@ -73,10 +73,10 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
               <ChevronDown className="h-5 w-5" />
             </button>
             <div className="flex min-w-0 flex-col items-center px-2 text-center">
-              <span className="truncate text-[10px] uppercase tracking-[0.2em] text-white/40">
+              <span className="truncate text-[10px] uppercase tracking-[0.2em] text-ink/40">
                 {context ?? "Lecture en cours"}
               </span>
-              <span className="truncate font-display text-sm text-white/80">{track.album}</span>
+              <span className="truncate font-display text-sm text-ink/80">{track.album}</span>
             </div>
             <button
               type="button"
@@ -113,7 +113,7 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
                   onSeek={seconds => player.seek(seconds)}
                   className="mt-2"
                 />
-                <div className="flex justify-between text-xs tabular-nums text-white/40">
+                <div className="flex justify-between text-xs tabular-nums text-ink/40">
                   <span>{formatTime(state.time)}</span>
                   <span>{duration > 0 ? `-${formatTime(Math.max(0, duration - state.time))}` : "--:--"}</span>
                 </div>
@@ -149,7 +149,7 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
                 onSeek={seconds => player.seek(seconds)}
                 className="mt-1"
               />
-              <div className="flex justify-between text-xs tabular-nums text-white/40">
+              <div className="flex justify-between text-xs tabular-nums text-ink/40">
                 <span>{formatTime(state.time)}</span>
                 <span>{duration > 0 ? `-${formatTime(Math.max(0, duration - state.time))}` : "--:--"}</span>
               </div>
@@ -173,12 +173,12 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
                 type="button"
                 onClick={() => player.toggle()}
                 aria-label={state.playing ? "Pause" : "Lecture"}
-                className="glass-press flex h-[68px] w-[68px] items-center justify-center rounded-full bg-white text-ink-950 shadow-[0_18px_45px_-12px_rgba(255,255,255,0.45)]"
+                className="glass-press flex h-[68px] w-[68px] items-center justify-center rounded-full bg-ink text-canvas shadow-[0_18px_45px_-12px_rgba(255,255,255,0.45)]"
               >
                 {state.playing ? (
-                  <Pause className="h-7 w-7 fill-ink-950" />
+                  <Pause className="h-7 w-7 fill-canvas" />
                 ) : (
-                  <Play className="h-7 w-7 translate-x-[2px] fill-ink-950" />
+                  <Play className="h-7 w-7 translate-x-[2px] fill-canvas" />
                 )}
               </button>
               <IconButton onClick={() => player.next()} label="Suivant">
@@ -222,7 +222,7 @@ function TrackMeta({ track }: { track: Track }) {
         <h1 className="truncate font-display text-2xl font-semibold tracking-tight md:text-3xl">
           {track.title}
         </h1>
-        <p className="truncate text-sm text-white/50">
+        <p className="truncate text-sm text-ink/50">
           {track.artist}
           {track.license ? (
             <>
@@ -231,7 +231,7 @@ function TrackMeta({ track }: { track: Track }) {
                 href={track.sourceUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="underline decoration-white/25 underline-offset-2 hover:text-white/80"
+                className="underline decoration-white/25 underline-offset-2 hover:text-ink/80"
               >
                 {track.license}
               </a>
@@ -261,7 +261,7 @@ function ModeSwitcher({
         aria-pressed={mode === "art"}
         className={clsx(
           "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-colors",
-          mode === "art" ? "bg-white text-ink-950" : "text-white/60",
+          mode === "art" ? "bg-ink text-canvas" : "text-ink/60",
         )}
       >
         <ListMusic className="h-4 w-4" />
@@ -274,7 +274,7 @@ function ModeSwitcher({
         aria-pressed={mode === "lyrics"}
         className={clsx(
           "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition-colors",
-          mode === "lyrics" ? "bg-white text-ink-950" : "text-white/60",
+          mode === "lyrics" ? "bg-ink text-canvas" : "text-ink/60",
         )}
       >
         <Mic2 className="h-4 w-4" />
@@ -302,7 +302,7 @@ function IconButton({
       aria-label={label}
       className={clsx(
         "glass-press flex h-11 w-11 items-center justify-center rounded-full transition-colors",
-        active ? "glass text-white" : "text-white/65 hover:text-white",
+        active ? "glass text-ink" : "text-ink/65 hover:text-ink",
       )}
     >
       {children}

@@ -52,13 +52,13 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
       <div className="flex items-baseline justify-between px-1">
         <h2 className="font-display text-xl">
           Ma musique
-          {tracks.length > 0 ? <span className="ml-2 text-sm font-normal text-white/35">{tracks.length}</span> : null}
+          {tracks.length > 0 ? <span className="ml-2 text-sm font-normal text-ink/35">{tracks.length}</span> : null}
         </h2>
         {tracks.length > 0 ? (
           <button
             type="button"
             onClick={() => void clear()}
-            className="text-xs text-white/40 underline decoration-white/20 underline-offset-2 hover:text-white/70"
+            className="text-xs text-ink/40 underline decoration-white/20 underline-offset-2 hover:text-ink/70"
           >
             tout effacer
           </button>
@@ -70,7 +70,7 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={importing}
-          className="glass glass-press flex items-center gap-2 rounded-full px-4 py-2 text-xs text-white/80 disabled:opacity-50"
+          className="glass glass-press flex items-center gap-2 rounded-full px-4 py-2 text-xs text-ink/80 disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />
           {importing ? "Import en cours…" : "Importer des fichiers"}
@@ -80,7 +80,7 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
             type="button"
             onClick={() => void handleDirectory()}
             disabled={busy}
-            className="glass glass-press flex items-center gap-2 rounded-full px-4 py-2 text-xs text-white/80 disabled:opacity-50"
+            className="glass glass-press flex items-center gap-2 rounded-full px-4 py-2 text-xs text-ink/80 disabled:opacity-50"
           >
             <FolderOpen className="h-4 w-4" />
             Choisir un dossier
@@ -97,18 +97,18 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
             event.target.value = ""
           }}
         />
-        {message ? <span className="text-xs text-white/40">{message}</span> : null}
+        {message ? <span className="text-xs text-ink/40">{message}</span> : null}
         {error ? <span className="text-xs text-red-300">{error}</span> : null}
       </div>
 
       {loading ? (
-        <div className="glass glass-sheen rounded-3xl px-4 py-6 text-center text-sm text-white/40">
+        <div className="glass glass-sheen rounded-3xl px-4 py-6 text-center text-sm text-ink/40">
           Lecture de la bibliothèque…
         </div>
       ) : tracks.length === 0 ? (
         <div className="glass glass-sheen flex items-start gap-3 rounded-3xl px-4 py-5">
-          <HardDriveDownload className="mt-0.5 h-5 w-5 shrink-0 text-white/35" />
-          <p className="text-sm leading-relaxed text-white/45">
+          <HardDriveDownload className="mt-0.5 h-5 w-5 shrink-0 text-ink/35" />
+          <p className="text-sm leading-relaxed text-ink/45">
             Tes propres fichiers audio restent sur cet appareil. Les titres, artistes et pochettes sont lus
             dans les balises du fichier — rien n&apos;est envoyé sur internet.
           </p>
@@ -122,7 +122,7 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
                 key={track.id}
                 className={clsx(
                   "flex items-center gap-3 px-3 py-2.5 transition-colors",
-                  isCurrent ? "bg-white/10" : "hover:bg-white/5",
+                  isCurrent ? "bg-surface-strong" : "hover:bg-surface",
                 )}
               >
                 <button
@@ -150,15 +150,15 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
                     ) : null}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={clsx("truncate text-sm", isCurrent ? "text-white" : "text-white/85")}>
+                    <p className={clsx("truncate text-sm", isCurrent ? "text-ink" : "text-ink/85")}>
                       {track.title}
                     </p>
-                    <p className="truncate text-xs text-white/40">
+                    <p className="truncate text-xs text-ink/40">
                       {track.artist}
                       {track.album && track.album !== "Ma bibliothèque" ? ` · ${track.album}` : ""}
                     </p>
                   </div>
-                  <span className="shrink-0 text-xs tabular-nums text-white/35">
+                  <span className="shrink-0 text-xs tabular-nums text-ink/35">
                     {formatTime(track.durationSec ?? 0)}
                   </span>
                 </button>
@@ -166,7 +166,7 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
                   type="button"
                   onClick={() => void remove(track.id)}
                   aria-label={`Retirer ${track.title}`}
-                  className="glass-press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/40 hover:text-white"
+                  className="glass-press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 hover:text-ink"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -178,13 +178,13 @@ export function LocalLibrary({ onPlay }: { onPlay?: (() => void) | undefined }) 
 
       {tracks.length > 0 && quota > 0 ? (
         <div className="px-1">
-          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-surface-strong">
             <div
-              className="h-full rounded-full bg-white/40"
+              className="h-full rounded-full bg-ink/40"
               style={{ width: `${Math.max(1, usedPercent)}%` }}
             />
           </div>
-          <p className="mt-1.5 text-xs text-white/30">
+          <p className="mt-1.5 text-xs text-ink/30">
             {formatBytes(usage)} utilisés sur {formatBytes(quota)} disponibles
           </p>
         </div>

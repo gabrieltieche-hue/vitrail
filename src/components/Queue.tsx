@@ -11,8 +11,8 @@ export function QueueList() {
   if (state.queue.length === 0) {
     return (
       <div className="glass glass-sheen rounded-3xl px-6 py-12 text-center">
-        <p className="font-display text-xl text-white/70">La file est vide</p>
-        <p className="mt-2 text-sm text-white/40">
+        <p className="font-display text-xl text-ink/70">La file est vide</p>
+        <p className="mt-2 text-sm text-ink/40">
           Choisis un album ou un morceau pour commencer l&apos;écoute.
         </p>
       </div>
@@ -28,7 +28,7 @@ export function QueueList() {
             key={`${track.id}-${index}`}
             className={clsx(
               "flex items-center gap-3 px-3 py-2.5 transition-colors",
-              isCurrent ? "bg-white/10" : "hover:bg-white/5",
+              isCurrent ? "bg-surface-strong" : "hover:bg-surface",
             )}
           >
             <button
@@ -52,14 +52,14 @@ export function QueueList() {
                 <p
                   className={clsx(
                     "truncate text-sm",
-                    isCurrent ? "font-medium text-white" : "text-white/85",
+                    isCurrent ? "font-medium text-ink" : "text-ink/85",
                   )}
                 >
                   {track.title}
                 </p>
-                <p className="truncate text-xs text-white/40">{track.album}</p>
+                <p className="truncate text-xs text-ink/40">{track.album}</p>
               </div>
-              <span className="shrink-0 text-xs tabular-nums text-white/35">
+              <span className="shrink-0 text-xs tabular-nums text-ink/35">
                 {formatTime(track.durationSec ?? 0)}
               </span>
             </button>
@@ -67,7 +67,7 @@ export function QueueList() {
               type="button"
               onClick={() => player.removeAt(index)}
               aria-label={`Retirer ${track.title}`}
-              className="glass-press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white/40 hover:text-white"
+              className="glass-press flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink/40 hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>
@@ -94,20 +94,20 @@ export function QueueSheet({ open, onClose }: { open: boolean; onClose: () => vo
         animate={{ y: open ? 0 : "100%" }}
         transition={{ type: "spring", stiffness: 360, damping: 36 }}
         onClick={event => event.stopPropagation()}
-        className="safe-bottom max-h-[72vh] w-full max-w-2xl overflow-hidden rounded-t-[2rem] border-t border-white/12 bg-ink-950 px-4 pt-3 pb-6"
+        className="safe-bottom max-h-[72vh] w-full max-w-2xl overflow-hidden rounded-t-[2rem] border-t border-line bg-canvas px-4 pt-3 pb-6"
       >
-        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25" />
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-ink/25" />
         <div className="mb-3 flex items-center justify-between px-1">
           <h2 className="font-display text-lg">
             File d&apos;attente
-            <span className="ml-2 text-sm text-white/40">{state.queue.length} morceaux</span>
+            <span className="ml-2 text-sm text-ink/40">{state.queue.length} morceaux</span>
           </h2>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => player.clearQueue()}
               aria-label="Vider la file"
-              className="glass-press flex h-9 w-9 items-center justify-center rounded-full text-white/50 hover:text-white"
+              className="glass-press flex h-9 w-9 items-center justify-center rounded-full text-ink/50 hover:text-ink"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -115,7 +115,7 @@ export function QueueSheet({ open, onClose }: { open: boolean; onClose: () => vo
               type="button"
               onClick={onClose}
               aria-label="Fermer"
-              className="glass-press flex h-9 w-9 items-center justify-center rounded-full text-white/60"
+              className="glass-press flex h-9 w-9 items-center justify-center rounded-full text-ink/60"
             >
               <X className="h-4 w-4" />
             </button>

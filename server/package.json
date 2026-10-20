@@ -1,0 +1,7 @@
+{
+  "name": "vitrail-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "description": "Service local Vitrail : transcription des paroles, bibliothèque partagée, file de la famille, statistiques."
+}

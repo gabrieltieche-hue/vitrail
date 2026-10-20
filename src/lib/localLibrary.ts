@@ -26,6 +26,7 @@ export type LocalRecord = {
   artwork: Blob | null
   artworkMime: string | null
   lyrics: string | null
+  hash: string | null
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -110,6 +111,23 @@ export type ImportResult = {
   totalBytes: number
 }
 
+/**
+ * Empreinte du contenu du fichier. Deux appareils qui ont le même morceau
+ * obtiennent la même empreinte, donc les mêmes paroles transcrites.
+ */
+export async function hashFile(file: Blob): Promise<string | null> {
+  try {
+    const buffer = await file.arrayBuffer()
+    const digest = await crypto.subtle.digest("SHA-256", buffer)
+    return Array.from(new Uint8Array(digest))
+      .map(byte => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 32)
+  } catch {
+    return null
+  }
+}
+
 export async function importFiles(files: File[]): Promise<ImportResult> {
   const result: ImportResult = { added: 0, failed: [], totalBytes: 0 }
   const existing = new Set((await listRecords()).map(record => `${record.filename}::${record.size}`))
@@ -123,6 +141,7 @@ export async function importFiles(files: File[]): Promise<ImportResult> {
       }
       const tags = await readTags(file)
       const durationSec = await readDuration(file)
+      const hash = await hashFile(file)
       const id = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const record: LocalRecord = {
         id,
@@ -139,6 +158,7 @@ export async function importFiles(files: File[]): Promise<ImportResult> {
         artwork: tags.artwork?.blob ?? null,
         artworkMime: tags.artwork?.mime ?? null,
         lyrics: tags.lyrics,
+        hash,
       }
       await putRecord(record)
       existing.add(key)
@@ -168,6 +188,7 @@ export function recordToTrack(record: LocalRecord, audioUrl: string, artworkUrl:
     sourceUrl: "local://",
     license: "Fichier personnel",
     ...(record.lyrics ? { embeddedLyrics: record.lyrics } : {}),
+    ...(record.hash ? { fileHash: record.hash } : {}),
   }
 }
 

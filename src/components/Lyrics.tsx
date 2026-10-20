@@ -36,7 +36,7 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
         {[72, 88, 60, 80, 52].map((width, index) => (
           <div
             key={index}
-            className="h-7 animate-pulse rounded-full bg-white/8"
+            className="h-7 animate-pulse rounded-full bg-ink/8"
             style={{ width: `${width}%`, animationDelay: `${index * 90}ms` }}
           />
         ))}
@@ -44,11 +44,24 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
     )
   }
 
+  if (state.status === "transcribing") {
+    return (
+      <div className={clsx("flex flex-col items-center justify-center gap-3 px-8 text-center", className)}>
+        <span className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-white/70" />
+        <p className="font-display text-xl text-ink/75">Paroles en cours de calcul</p>
+        <p className="max-w-xs text-sm leading-relaxed text-ink/35">
+          Ce morceau n&apos;est pas dans les bases de paroles connues. L&apos;app le transcrit sur cet
+          appareil — les paroles s&apos;afficheront ici dès que c&apos;est prêt.
+        </p>
+      </div>
+    )
+  }
+
   if (state.status === "none") {
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 px-8 text-center", className)}>
-        <p className="font-display text-xl text-white/70">Paroles indisponibles</p>
-        <p className="max-w-xs text-sm leading-relaxed text-white/35">
+        <p className="font-display text-xl text-ink/70">Paroles indisponibles</p>
+        <p className="max-w-xs text-sm leading-relaxed text-ink/35">
           Ce morceau n&apos;est pas encore référencé dans la base libre LRCLIB. Les paroles apparaîtront dès
           qu&apos;elles y seront ajoutées.
         </p>
@@ -59,8 +72,8 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
   if (state.status === "error") {
     return (
       <div className={clsx("flex flex-col items-center justify-center gap-3 px-8 text-center", className)}>
-        <p className="font-display text-xl text-white/70">Connexion aux paroles impossible</p>
-        <p className="text-sm text-white/35">{state.message}</p>
+        <p className="font-display text-xl text-ink/70">Connexion aux paroles impossible</p>
+        <p className="text-sm text-ink/35">{state.message}</p>
       </div>
     )
   }
@@ -94,11 +107,11 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
                   "block w-full origin-left text-left font-display leading-tight transition-all duration-500",
                   "px-2 py-2",
                   isActive
-                    ? "text-3xl font-semibold text-white drop-shadow-[0_2px_18px_rgba(0,0,0,0.6)] sm:text-4xl"
+                    ? "text-3xl font-semibold text-ink drop-shadow-[0_2px_18px_rgba(0,0,0,0.6)] sm:text-4xl"
                     : distance === 1
-                      ? "text-2xl text-white/45 sm:text-3xl"
-                      : "text-2xl text-white/25 sm:text-3xl",
-                  isPast && !isActive ? "text-white/18" : "",
+                      ? "text-2xl text-ink/45 sm:text-3xl"
+                      : "text-2xl text-ink/25 sm:text-3xl",
+                  isPast && !isActive ? "text-ink/18" : "",
                 )}
               >
                 {isActive && line.words && line.words.length > 0 ? (
@@ -110,7 +123,7 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
                           key={`${word.time}-${wordIndex}`}
                           className={clsx(
                             "transition-colors duration-200",
-                            isWordActive ? "text-white" : "text-white/35",
+                            isWordActive ? "text-ink" : "text-ink/35",
                           )}
                         >
                           {word.text}{" "}
@@ -132,7 +145,7 @@ export function Lyrics({ state, currentTime, onSeek, className }: LyricsProps) {
   if (state.lyrics.plain && state.lyrics.plain.length > 0) {
     return (
       <div className={clsx("no-scrollbar line-mask h-full overflow-y-auto px-2", className)}>
-        <div className="space-y-4 py-[30%] font-display text-2xl leading-snug text-white/70">
+        <div className="space-y-4 py-[30%] font-display text-2xl leading-snug text-ink/70">
           {state.lyrics.plain.map((line, index) => (
             <p key={index}>{line}</p>
           ))}
