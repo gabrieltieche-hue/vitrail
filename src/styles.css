@@ -2,6 +2,9 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/outfit";
 
+/* Variante « clair » : on l'active quand <html> porte la classe .light. */
+@custom-variant light (&:where(html.light, html.light *));
+
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;

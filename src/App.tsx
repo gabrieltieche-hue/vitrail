@@ -91,7 +91,7 @@ export default function App() {
 
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-48 bg-gradient-to-t from-canvas via-canvas/85 to-transparent"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-10 h-48 bg-gradient-to-t from-canvas via-canvas/85 to-transparent light:via-canvas/35 light:to-transparent"
       />
 
       {/* Dock du bas : lecteur compact puis navigation, dans un seul flux

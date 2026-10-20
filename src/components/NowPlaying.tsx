@@ -57,10 +57,10 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
             <img
               src={track.artwork}
               alt=""
-              className="breathe absolute left-1/2 top-1/3 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 scale-[5] object-cover opacity-45 blur-3xl saturate-160"
+              className="breathe absolute left-1/2 top-1/3 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 scale-[5] object-cover opacity-45 blur-3xl saturate-160 light:opacity-25 light:saturate-[1.05]"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-canvas/55 via-canvas/80 to-canvas" />
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(0,0,0,0.7)_100%)]" />
+            <div className="absolute inset-0 bg-gradient-to-b from-canvas/55 via-canvas/80 to-canvas light:from-canvas/50 light:via-canvas/75 light:to-canvas/95" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_30%,rgba(0,0,0,0.7)_100%)] light:bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.1)_100%)]" />
           </div>
 
           <header className="safe-top relative z-10 flex items-center justify-between px-4 pt-3 pb-1">

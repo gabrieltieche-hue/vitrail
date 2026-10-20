@@ -21,7 +21,13 @@ driver.set_window_size(1280, 800)
 
 try:
     driver.get(BASE)
+    time.sleep(2)
+    # Le thème est mémorisé : on repart d'un état connu.
+    driver.execute_script("localStorage.setItem('vitrail_theme_v1', 'dark')")
+    driver.get(BASE)
     time.sleep(4)
+    dark = driver.execute_script("return document.documentElement.classList.contains('light')")
+    print("  au chargement, mode sombre :", not dark, flush=True)
     driver.save_screenshot(str(OUT / "theme-1-sombre.png"))
     print("  -> theme-1-sombre.png", flush=True)
 
