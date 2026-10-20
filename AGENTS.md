@@ -100,10 +100,17 @@ server/                    service local (tourne sur la tablette)
 9. **Firefox et `backdrop-filter`** : le verre dépoli laisse transparaître
    le contenu. Les panneaux posés sur du contenu (dock) sont opaques
    (`.dock-panel`).
-10. **Autoplay headless** : un clic Selenium scripté n'est pas un geste
+10. **Mixed content** : une page HTTPS ne peut pas appeler une API HTTP
+    locale — Firefox bloque la requête. C'est pourquoi le service local sert
+    l'application elle-même : même origine, tout fonctionne. Depuis Vercel,
+    seules les fonctions purement distantes (LRCLIB) marchent.
+11. **Autoplay headless** : un clic Selenium scripté n'est pas un geste
     utilisateur → `media.autoplay.default = 0` dans les tests.
-11. **archive.org répond 500 par intermittence** → le lecteur réessaie
+12. **archive.org répond 500 par intermittence** → le lecteur réessaie
     3 fois avec un paramètre anti-cache.
+13. **`read -a` sur `/proc/<pid>/cmdline`** renvoie 1 en fin de fichier : un
+    `|| continue` ecarte alors *tous* les processus. Filtrer avec
+    `/proc/<pid>/exe` et `tr`.
 
 ---
 
