@@ -24,17 +24,27 @@
 
 ## 2. L'architecture en deux pieces
 
-L'application (100 % statique, déployée sur Vercel) et un **service local**
-qui tourne sur la machine qui héberge la tablette.
+L'application (100 % statique) et un **service local** qui tourne sur la
+machine qui héberge la tablette.
 
 ```
-Navigateur  ──HTTP──▶  vitrail-two.vercel.app   (l'app, statique)
-    │
-    │  127.0.0.1:8099  (ou 192.168.1.114:8099 pour les autres appareils)
-    ▼
-Service local  ──▶  whisper.cpp   (transcription des paroles)
-                ──▶  /root/vitrail-data/  (bibliothèque, transcriptions, file, stats)
+Navigateur  ──▶  http://127.0.0.1:8099   (tablette)
+                     ou http://192.168.1.114:8099  (autres appareils du réseau)
+                          │
+                          ├── l'application (dist/)
+                          └── l'API : transcription, bibliothèque, file, stats
 ```
+
+> **Pourquoi l'app est servie par le service local ?** Une page HTTPS ne peut
+> pas appeler une API HTTP locale : le navigateur bloque la requête
+> (*mixed content*). En servant l'app et l'API depuis la même origine, tout
+> fonctionne. Sur la tablette, `127.0.0.1` est une origine sûre : la PWA
+> s'installe normalement.
+
+Le déploiement Vercel (`https://vitrail-two.vercel.app`) reste utile pour la
+démonstration et l'accès hors de la machine, mais **sans** les fonctions
+locales (paroles transcrites, file de la famille) : l'app y affiche
+explicitement où aller.
 
 ### Ce que fait le service local, et pourquoi le navigateur ne peut pas le faire
 
@@ -56,10 +66,23 @@ Service local  ──▶  whisper.cpp   (transcription des paroles)
 |---|---|---|---|
 | 1 | **Paroles intégrées au fichier** (ID3 `USLT`) | instantanée | non synchronisées |
 | 2 | **LRCLIB** (base libre publique) | ~1 s | synchronisées |
-| 3 | **Transcription locale** (whisper.cpp) | 1 à 3 min | synchronisées mot à mot |
+| 3 | **Transcription locale** (whisper.cpp) | 4 à 5 min | synchronisées mot à mot |
 
 L'ordre est important : LRCLIB est instantané et parfait quand le morceau y
 est référencé ; la transcription est le filet de sécurité pour tout le reste.
+
+### Le temps de transcription, en toute franchise
+
+whisper.cpp sur ce processeur (8 cœurs ARM) traite environ une minute de
+musique par minute de calcul. **Un morceau de trois minutes demande donc
+quatre à cinq minutes de transcription**, une seule fois : le résultat est
+mis en cache par empreinte du fichier, et partagé avec tous les appareils de
+la famille. Les morceaux connus (c'est-à-dire la très grande majorité des
+chansons commerciales) ne payent jamais ce délai, thanks à LRCLIB.
+
+Le découpage en blocs de 28 s avec 2 s de chevauchement est indispensable :
+whisper.cpp dégrade les fichiers longs, car dès le premier jeton `[Musique]`
+le contexte glissant contamine toutes les fenêtres de 30 s suivantes.
 
 ### Normalisation des métadonnées
 
