@@ -86,7 +86,7 @@ export function QueueSheet({ open, onClose }: { open: boolean; onClose: () => vo
       initial={false}
       animate={{ opacity: open ? 1 : 0, pointerEvents: open ? "auto" : "none" }}
       transition={{ duration: 0.2 }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
       onClick={onClose}
     >
       <motion.div
@@ -94,7 +94,7 @@ export function QueueSheet({ open, onClose }: { open: boolean; onClose: () => vo
         animate={{ y: open ? 0 : "100%" }}
         transition={{ type: "spring", stiffness: 360, damping: 36 }}
         onClick={event => event.stopPropagation()}
-        className="glass-strong safe-bottom max-h-[72vh] w-full max-w-2xl overflow-hidden rounded-t-[2rem] px-4 pt-3 pb-6"
+        className="safe-bottom max-h-[72vh] w-full max-w-2xl overflow-hidden rounded-t-[2rem] border-t border-white/12 bg-ink-950 px-4 pt-3 pb-6"
       >
         <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-white/25" />
         <div className="mb-3 flex items-center justify-between px-1">

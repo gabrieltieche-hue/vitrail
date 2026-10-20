@@ -135,6 +135,11 @@ export function NowPlaying({ open, onClose, onOpenQueue }: NowPlayingProps) {
           </div>
 
           <footer className="safe-bottom relative z-10 px-5 pt-2 pb-4 md:px-14">
+            {state.error ? (
+              <p className="mb-2 rounded-xl bg-red-500/15 px-3 py-1.5 text-center text-xs text-red-200">
+                {state.error}
+              </p>
+            ) : null}
             <div className="md:hidden">
               <TrackMeta track={track} />
               <ProgressBar
