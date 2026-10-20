@@ -11,3 +11,10 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 )
+
+// PWA : coquille applicative disponible hors connexion.
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => undefined)
+  })
+}
