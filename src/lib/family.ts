@@ -74,11 +74,26 @@ let resolving: Promise<string | null> | null = null
 function candidates(): string[] {
   const list: string[] = []
   if (typeof location !== "undefined") {
-    list.push(`${location.protocol}//${location.hostname}:8099`)
+    // Priorité à l'origine courante : quand l'app est servie par le service
+    // local (http://127.0.0.1:8099), l'API est en même origine et tout
+    // fonctionne. Depuis une page HTTPS (Vercel), l'accès à une API HTTP
+    // locale est bloqué par le navigateur (mixed content) : on le dit.
+    list.push(location.origin)
+    if (location.port !== "8099") {
+      list.push(`${location.protocol}//${location.hostname}:8099`)
+    }
   }
   list.push("http://127.0.0.1:8099")
   list.push("http://192.168.1.114:8099")
   return [...new Set(list)]
+}
+
+/** Vrai quand la page est en HTTPS : le navigateur bloque alors l'appel à
+ *  une API HTTP locale (mixed content). */
+export function isMixedContentBlocked(): boolean {
+  if (typeof location === "undefined") return false
+  if (location.protocol !== "https:") return false
+  return true
 }
 
 async function probe(url: string, timeoutMs = 1500): Promise<boolean> {

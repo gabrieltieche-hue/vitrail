@@ -23,6 +23,7 @@ const crypto = require("node:crypto")
 
 const PORT = Number(process.env.VITRAIL_PORT || 8099)
 const DATA_DIR = process.env.VITRAIL_DATA || "/root/vitrail-data"
+const DIST_DIR = process.env.VITRAIL_DIST || "/root/vitrail/dist"
 const WHISPER_BIN = process.env.VITRAIL_WHISPER || "/root/whisper.cpp/build/bin/whisper-cli"
 const WHISPER_MODEL = process.env.VITRAIL_MODEL || "/root/models/ggml-base.bin"
 const WHISPER_LIB_DIR = path.dirname(WHISPER_BIN)
@@ -483,6 +484,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // Tout ce qui n'est pas une API est l'application elle-même.
+    if (!route.startsWith("/api/")) {
+      await serveStatic(req, res, route)
+      return
+    }
+
     // -- santé ------------------------------------------------------------
     if (route === "/api/health") {
       const items = await listLibrary()
@@ -700,6 +707,51 @@ const server = http.createServer(async (req, res) => {
     json(res, 500, { error: error instanceof Error ? error.message : "erreur interne" })
   }
 })
+
+/**
+ * L'application est servie par le service local, et non seulement depuis
+ * Vercel. Raison : une page HTTPS ne peut pas appeler une API HTTP locale
+ * (mixed content bloqué par le navigateur). En servant l'app et l'API depuis
+ * la même origine, les paroles transcrites et la file de la famille
+ * fonctionnent — sur la tablette comme sur les autres appareils du réseau.
+ */
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
+}
+
+async function serveStatic(req, res, pathname) {
+  const relative = pathname === "/" ? "/index.html" : pathname
+  const target = path.join(DIST_DIR, path.normalize(relative).replace(/^(\.\.[/\\])+/, ""))
+  if (!target.startsWith(DIST_DIR)) {
+    json(res, 403, { error: "Chemin refusé" })
+    return
+  }
+  let file = target
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    file = path.join(DIST_DIR, "index.html")
+  }
+  if (!fs.existsSync(file)) {
+    json(res, 404, { error: "Application non construite (lance npm run build)" })
+    return
+  }
+  const ext = path.extname(file).toLowerCase()
+  const stat = await fsp.stat(file)
+  const headers = {
+    "Content-Type": MIME[ext] ?? "application/octet-stream",
+    "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600",
+  }
+  res.writeHead(200, { ...headers, "Content-Length": stat.size })
+  fs.createReadStream(file).pipe(res)
+}
 
 function readJsonBody(req) {
   return readMetadata(req)

@@ -4,145 +4,86 @@
 
 ---
 
-## SESSION — 2026-10-20 (v0.1 : origine + premier lecteur)
+## SESSION — 2026-10-20 (v0.3 : paroles pour tout, capsules, file famille, thème clair)
 
 ### Résumé
 
-Création complète de l'app **Vitrail** à partir d'un entretien produit
-(`grill-me`). Le projet part d'un cadrage dur : l'utilisateur voulait « tout
-Spotify, gratuit, sans pub ». Ce n'est pas possible légalement et techniquement
-— Spotify réserve le flux complet aux comptes Premium et ne le distribue pas à
-un lecteur tiers, et les recommandations algorithmiques sont fermées aux apps
-tierces depuis 2024. Arbitrage retenu avec l'utilisateur : **abonnement famille
-Spotify** (~20 €/mois) comme moteur du son, et **Vitrail** comme couche
-d'expérience (design, paroles, capsules, file partagée) — pas un clone.
+Session dense, partie d'un retour utilisateur enflammé : « les paroles
+n'apparaissent pas, c'est UN GROS PROBLEME », plus une demande de mode
+clair et de design « plus Apple ».
 
-Décisions actées : direction artistique **« verre et lumière »**, nom **Vitrail**,
-pile **React 19 + Vite 7 + TS strict + Tailwind 4**, 2 à 3 utilisateurs,
-**OAuth PKCE** (donc zéro serveur, zéro secret), v1 = **lecteur + capsules**,
-file famille en v2 via playlist collaborative Spotify.
+Quatre chantiers livrés et déployés :
+1. **UI** — le mini-lecteur et la barre de navigation se chevauchaient
+   (signalé sur des captures). Corrigé par un dock unique.
+2. **Paroles pour tout morceau importé** — le vrai problème. Résolu par une
+   cascade à trois étages.
+3. **Capsules d'écoute** — temps d'écoute, tops, graphique 7 jours.
+4. **File de la famille** — service local, file commune en temps réel.
 
-### Décisions
-
-- **Pas d'Apple Music** : 99 €/an de développeur Apple requis, lecture fragile
-  sur Chrome/Android, paroles via endpoints non documentés. Spotify gagne.
-- **Mode démo avant abonnement** : la règle Spotify de février 2026 rejette
-  *tous* les appels API sans Premium propriétaire. Sans démo, rien ne serait
-  validable avant de payer. Le catalogue de démo est donc réel
-  (53 morceaux CC BY 4.0, Josh Woodward, streamés depuis archive.org) et le
-  connecteur Spotify se substituera ensuite.
-- **Paroles** : LRCLIB (gratuit, CORS ouvert, base libre) plutôt que l'API
-  Apple non documentée. 24 morceaux sur 53 ont des paroles synchronisées.
-- **File famille** : playlist collaborative Spotify, pas de serveur maison.
-- **Exclus** : YouTube/ripping, contournement de pub, toute source non
-  autorisée, et toute recommandation algorithmique tierce.
-
-### Vérifications
-
-- `npm run typecheck` : OK (strict + `exactOptionalPropertyTypes`).
-- `npm run build` : OK (~380 ko JS, 118 ko gzip).
-- **Son réellement audible** : probe Selenium → `paused: false`,
-  `currentTime` en cours d'avance, `readyState: 4`, `duration: 241.6 s`.
-- Captures visuelles relues à 1280×800 et 430×900 : bibliothèque, lecteur,
-  paroles synchronisées, file d'attente. Verdict écrit à chaque itération.
-- Doc Spotify consultée directement (authorization, quota modes, changelog
-  fév./mars 2026) — les limites citées sont vérifiées, pas estimées.
-
-### Bugs trouvés et corrigés
-
-1. **Cascade Tailwind** : mes règles CSS étaient hors `@layer`, donc
-   `button { color: inherit }` écrasait `text-ink-950` → texte blanc sur fond
-   blanc (bouton actif de la nav illisible). Tout est passé en
-   `@layer base` / `@layer components`.
-2. **Débordement des paroles** : grille `md:grid-cols-2` sans
-   `grid-rows-[minmax(0,1fr)]` → les paroles sortaient de l'écran et
-   chevauchaient l'en-tête.
-3. **Ligne active rognée** : `scale-[1.06]` débordait de la colonne → scale
-   supprimé, emphase portée par le poids et la couleur.
-4. **Versions instrumentales dans le catalogue** : le filtre « No Vocals »
-   portait sur le nom brut ; il faut nettoyer les underscores d'abord.
-   Catalogue ramené de 65 à 53 morceaux.
-5. **File d'attente translucide** : le `backdrop-blur` de Firefox laissait
-   passer les paroles du lecteur malgré 96 % d'opacité → fond 100 % opaque.
-6. **Erreur audio fantôme** : Firefox émet `MEDIA_ERR_DECODE` (code 3) alors
-   que la lecture est nominale (`readyState: 4`, `currentTime` en marche).
-   L'interface affichait « Lecture impossible » sur un son qui jouait.
-   → l'erreur n'est retenue que si `readyState < HAVE_CURRENT_DATA`, et
-   l'événement `playing` la réinitialise.
-7. **Pochette en bandes** : `<img loading="lazy">` laissait Firefox décoder le
-   JPEG par bandes (image tronquée horizontalement). → `eager` + `decoding="async"`
-   sur la pochette du lecteur.
-
-### Suite
-
-1. Capsules d'écriture (historique persistant, top artistes/albums).
-2. Connecteur Spotify PKCE + Web Playback SDK, avec bascule lecteur/télécommande.
-3. File famille (playlist collaborative rafraîchie).
-4. Déploiement Vercel + installation de la PWA sur la tablette.
-
----
-
-## SESSION — 2026-10-20 (v0.2 : bibliothèque personnelle)
-
-### Résumé
-
-Ajout de **la musique de l'utilisateur** dans l'app, à la demande explicite :
-« est-ce que je peux télécharger des musiques moi-mêmes et les rendre disponibles
-sur mon app ? ». Réponse : oui, implémenté.
-
-Deux entrées dans « Ma musique » :
-- **Import** (sélection multiple) — le fichier est copié dans **IndexedDB**
-  (`localStorage` est plafonné à ~5 Mo et n'accepte que des chaînes).
-- **Dossier en direct** — File System Access API (`showDirectoryPicker`) : les
-  fichiers sont lus sur place, sans duplication. Chrome uniquement ; le bouton
-  n'apparaît pas sur Firefox.
-
-Un **parseur ID3v2 maison** (sans dépendance) lit titre, artiste, album, année,
-numéro de piste, **pochette (APIC)** et **paroles (USLT)**. Les fichiers non-MP3
-retombent sur le nom de fichier (« Artiste - Titre »).
-
-Bonus découvert en route : les fichiers de l'utilisateur contiennent souvent
-des paroles intégrées (trame `USLT`). Elles sont utilisées **en priorité**,
-sans appel à LRCLIB — le lecteur affiche donc les paroles de vos propres
-fichiers, non synchronisées.
+Décision structurante : **abandon de Spotify** (l'utilisateur importe tous
+ses morceaux). L'app devient un lecteur local avec un service de famille.
 
 ### Décisions
 
-- **IndexedDB, pas localStorage** : les blobs audio n'y ont pas leur place.
-- **Lecture des URL `blob:`** : elles meurent au rechargement, donc la file
-  persistée contenait des sources mortes. Ajout de `player.syncLocalTracks()`,
-  appelé à chaque relecture de la bibliothèque.
-- **Import ≠ partage** : chaque appareil importe ses propres fichiers. Le
-  partage familial reste porté par la playlist collaborative Spotify. L'app ne
-  redistribue rien.
-- **Relance automatique du flux** : archive.org répond 500 par intermittence
-  (≈ 1 sur 10). Le lecteur réessaie 3 fois avec un paramètre anti-cache.
+- **Service local obligatoire.** Le navigateur seul ne peut ni transcrire, ni
+  partager une file entre appareils. Le service tourne sur la machine de la
+  tablette, port 8099, joignable en `127.0.0.1` et en `192.168.1.114`.
+- **Clé de partage = SHA-256 du fichier.** Le navigateur calcule
+  l'empreinte, le service indexe la transcription par empreinte. Les paroles
+  transcrites sont donc partagées entre les appareils sans recalcul.
+- **LRCLIB avant la transcription.** LRCLIB est instantané et parfait ;
+  enchaîner la transcription d'abord aurait coûté des minutes pour rien.
+- **whisper.cpp découpé en blocs de 28 s avec 2 s de chevauchement.**
+  whisper.cpp dégrade les fichiers longs : dès le premier jeton `[Musique]`,
+  le contexte glissant contamine toutes les fenêtres de 30 s suivantes et le
+  reste du morceau n'est plus transcrit. En découpant nous-mêmes, chaque bloc
+  est traité à froid.
+- **Thème par variables sémantiques** (`canvas`, `ink`, `surface`, `line`) :
+  une seule Truth pour les deux thèmes, et une variante Tailwind `light:`.
 
 ### Vérifications
 
-- Import d'un vrai fichier de la tablette (`/sdcard/Download/Mirage.mp3`) :
-  ID3 relu octet par octet en Python et comparé au résultat du parseur JS
-  → `TIT2 = "Mirage"`, `TPE1 = "gabriel_tieche"` : **identiques**.
-- Lecture du fichier importé : `paused: false`, `currentTime` en avance,
-  `readyState: 4`, `duration: 186.4 s`, source `blob:` — **aucune erreur**.
-- Pochette extraite du fichier affichée en plein écran, paroles intégrées
-  visibles dans le lecteur (« [Intro] / Ouais… / [Verse 1] … »).
-- Stockage : « 4,3 Mo utilisés sur 10 Go disponibles ».
+- **Paroles** : `Mirage` (paroles intégrées) et `PARISIENNE` (LRCLIB,
+  159 s = durée exacte du fichier) affichent bien leurs paroles.
+- **Transcription** : `Mirage` transcrit en entier par blocs —
+  « Encore une fois / Je sais que je devrais pas / C'est qu'un mirage,
+  mirage, mirage » — contre 3 lignes avant le découpage.
+- **UI** : géométrie mesurée dans le navigateur, mini-lecteur 568–656 px,
+  navigation 664–706 px, **aucun chevauchement**.
+- **Capsules** : 7/7 (écoute enregistrée, temps affiché, graphique 7 jours).
+- **Thèmes** : captures relues en clair et en sombre.
+- **Production** : `https://vitrail-two.vercel.app` redéployée et testée.
 
 ### Bugs trouvés et corrigés
 
-7. **Erreur audio fantôme** (déjà listée) : l'interface affichait « Lecture
-   impossible » sur un son qui jouait.
-8. **URL `blob:` mortes** après rechargement → `syncLocalTracks()`.
-9. **Clic sur un morceau local** ne'ouvrait pas l'écran de lecture → callback
-   `onPlay` propagé jusqu'à `LocalLibrary`.
-10. **Autoplay headless** : un clic scripté n'est pas un geste utilisateur,
-    Firefox bloque la lecture → `media.autoplay.default = 0` dans les tests
-    (c'était un artefact de test, pas un bug produit).
+11. **Chevauchement mini-lecteur / navigation** : deux `fixed`.bottom
+    concurrents. Remplacés par un dock unique en flux.
+12. **Panneau du dock translucide** : le `backdrop-filter` de Firefox
+    laissait voir les pochettes à travers → fond dense (`.dock-panel`).
+13. **Paroles : ordre inversé** — la transcription partait avant LRCLIB.
+14. **Paroles : homonymes** — « Mirage » existe chez Elvis Presley et
+    Santana ; le filtre exige maintenant que l'artiste corresponde.
+15. **Paroles : balises sales** — le titre nettoyé n'était jamais produit
+    (le préfixe artiste restait) et le candidat était comparé au titre brut.
+    Corrigé par des variantes + score max.
+16. **whisper.cpp : fichiers longs** → découpage en blocs.
+17. **whisper.cpp : `-sns`** supprime le jeton `[Musique]` *et* décale les
+    horodatages → on ne l'utilise pas, on filtre côté serveur.
+18. **whisper.cpp : VAD** écrase les horodatages de fin de segment → sans VAD.
+19. **Historique jamais enregistré** si on n'écoutait jamais jusqu'au
+    changement de morceau → enregistrement par pas de 15 s + à la pause.
+20. **Graphe des 7 jours vide** : `items-end` effondrait la hauteur des
+    colonnes → `items-stretch` + `h-full`.
+21. **Service local : `require` en ESM** — le `package.json` de l'app impose
+    `"type": "module"` → `server/package.json` en `commonjs`.
+22. **Service local : EADDRINUSE** — l'ancienne instance tenait le port.
+23. **`pkill -f` a tué le shell appelant** (le motif contenait le nom du
+    script) → filtrage sur la ligne de commande exacte, exclusion de `$$`.
+24. **Mode clair : fond resté sombre** → le backdrop et le voile de la
+    page ne suivaient pas le thème.
 
 ### Suite
 
-1. Capsules d'écoute (historique persistant, top artistes/albums).
-2. Connecteur Spotify PKCE + Web Playback SDK, avec bascule lecteur/télécommande.
-3. File famille (playlist collaborative rafraîchie).
-4. Déploiement Vercel + installation de la PWA sur la tablette.
+1. Partage explicite d'un import vers la bibliothèque de la famille.
+2. Rétrospective hebdomadaire des capsules.
+3. Pochettes de la bibliothèque de famille dans la file partagée.

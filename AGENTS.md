@@ -2,73 +2,63 @@
 
 > Contexte complet pour le prochain agent IA qui reprend le projet.
 > Langue de travail : **français** (UI, code commenté, réponses).
-> Dernière mise à jour : **2026-10-20**.
+> Dernière mise à jour : **2026-10-20** (v0.3).
 
 ---
 
 ## 0. Origine du projet
 
-Projet né d'un entretien produit (`grill-me`) du 2026-10-20. Les décisions ci-dessous
-ont été **arbitrées avec l'utilisateur**, pas déduites :
+Projet né d'un entretien produit (`grill-me`) le 2026-10-20. Décisions
+arbitrées **avec** l'utilisateur, pas déduites :
 
-- App **de musique pour la famille** (2 à 3 personnes), pas un clone de Spotify :
-  une couche d'expérience (design, paroles, capsules) au-dessus d'un service de flux.
-- **Direction artistique « verre et lumière »** : verre dépoli, transparence, la
-  pochette et ses couleurs sont la source de lumière de l'interface.
-- **Spotify = moteur du son** (et non Apple Music : 99 €/an de développeur).
-- **Paroles synchronisées plein écran** = pilier nº 1.
-- **File d'attente famille** = pilier nº 2, via playlist collaborative Spotify.
-- **Capsules et statistiques d'écoute** = pilier nº 3.
-- **v1 = lecteur + capsules.** La file famille arrive en v2 (non testable avant
-  l'abonnement).
+- App de musique **pour la famille** (2 à 3 personnes).
+- Direction artistique **« verre et lumière »**, declined en **thème clair et
+  sombre**.
+- **Pas de Spotify** (décision du 2026-10-20, v0.3) : l'utilisateur importe
+  tous ses morceaux. L'app est un lecteur local + service de famille.
+- **Paroles pour tout morceau importé**, synchronisées — c'est l'exigence
+  numéro un, formulée explicitement.
+- **Capsules d'écoute** et **file de la famille** : les deux autres piliers.
 
-### Ce qui est hors périmètre, définitivement
+### Hors périmètre, définitivement
 
-- Télécharger depuis YouTube, contourner les pubs, toute source non autorisée.
-- Apple Music (coût développeur 99 €/an), et plus généralement tout service qui
-  impose un abonnement développeur.
-- Recommandations algorithmiques Spotify, BPM, artistes similaires : **fermés aux
-  apps tierces** depuis 2024.
+- YouTube, ripping, contournement de pub, toute source non autorisée.
+- Apple Music (99 €/an de développeur) et tout service de streaming distant.
+- Recommandations algorithmiques tierces (fermées par Spotify en 2024).
 
 ---
 
-## 1. État actuel
+## 1. Architecture
 
-v0.1 — lecteur fonctionnel en mode démonstration.
-
-- `src/audio/player.ts` : moteur de lecture (HTMLAudioElement), file, shuffle,
-  repeat, persistance `localStorage` (clé `vitrail_v1_state`).
-- `src/lib/demoCatalog.ts` : **53 morceaux** Josh Woodward (CC BY 4.0), audio
-  streamé depuis archive.org. **Fichier généré**, ne pas éditer à la main.
-- `src/lib/lyrics.ts` : client LRCLIB + cache 30 jours (`vitrail_lyrics_v1`).
-- `src/lib/lrc.ts` : parseur LRC (ligne + mot à mot).
-- `src/lib/id3.ts` : lecture des balises ID3v2 (titre, artiste, album,
-  pochette APIC, paroles USLT) + repli sur le nom de fichier.
-- `src/lib/localLibrary.ts` : IndexedDB — import des fichiers personnels.
-- `src/lib/useLocalLibrary.ts` : hook de la bibliothèque personnelle.
-- `src/lib/lyricsIndex.ts` : index des morceaux ayant des paroles. **Généré**.
-- `src/components/` : `NowPlaying`, `Lyrics`, `Library`, `LocalLibrary`,
-  `Queue`, `MiniPlayer`, `Artwork`, `Backdrop`, `ProgressBar`.
-
-### Bibliothèque personnelle
-
-Import de fichiers dans IndexedDB (bouton « Importer des fichiers ») ou lecture
-d'un dossier en place (bouton « Choisir un dossier », File System Access API,
-Chrome uniquement). Titre, artiste, album, pochette et paroles sont lus dans
-les balises du fichier.
-
-Vérification : `python3.13 scripts/test-local-import.py` (importe
-`/mnt/sdcard/Download/Mirage.mp3`, vérifie la lecture et l'affichage des
-paroles intégrées).
-
-### Régénérer les fichiers générés
-
-```bash
-python3.13 scripts/build-lyrics-index.py
+```
+src/                       application statique (Vercel)
+  audio/player.ts          moteur de lecture + file + persistance
+  components/              Backdrop, Artwork, NowPlaying, Lyrics, Queue,
+                           Library, LocalLibrary, Capsules, FamilyQueue,
+                           MiniPlayer, ProgressBar, ThemeToggle
+  lib/
+    demoCatalog.ts         53 morceaux libres (généré)
+    lyrics.ts              client LRCLIB + appariement
+    matching.ts            normalisation des balises + score de correspondance
+    lyricsIndex.ts         index des morceaux ayant des paroles (généré)
+    lrc.ts                 parseur LRC (ligne + mot à mot)
+    id3.ts                 balises ID3v2 (titre, pochette APIC, paroles USLT)
+    localLibrary.ts        IndexedDB : import des fichiers personnels
+    family.ts              client du service local
+    history.ts             historique d'écoute (base des capsules)
+    theme.ts               thème clair / sombre
+    useLyrics.ts           moteur de paroles (cascade à 3 étages)
+server/                    service local (tourne sur la tablette)
+  server.js                transcription, bibliothèque partagée, file, stats
+  service.sh               start / stop / restart / status
+  supervise.sh             relance le service s'il tombe
 ```
 
-Le catalogue de démo est reconstruit par un script similaire (les métadonnées
-archive.org sont dans `/tmp/jw-meta.json` — **à re-fetcher si absent**).
+- **Aucun serveur distant.** L'app est 100 % statique.
+- Persistances : `vitrail_v1_state` (file), `vitrail_history_v1` (écoute),
+  `vitrail_lyrics_v2` (paroles LRCLIB), `vitrail_transcripts_v1`
+  (transcriptions), `vitrail_theme_v1` (thème), IndexedDB `vitrail-local`
+  (fichiers importés).
 
 ---
 
@@ -78,84 +68,61 @@ archive.org sont dans `/tmp/jw-meta.json` — **à re-fetcher si absent**).
 |---|---|
 | `npm run dev` | http://127.0.0.1:5199 |
 | `npm run typecheck` | `tsc --noEmit` (strict + `exactOptionalPropertyTypes`) |
+| `npm run test` | vitest (appariement des métadonnées) |
 | `npm run build` | `dist/` |
-| `npm run preview` | http://127.0.0.1:4199 |
-| `python3.13 scripts/visual-check.py tablette` | captures Firefox (voir §4) |
+| `bash server/service.sh restart` | service local (port 8099) |
 
-**Gate** : `typecheck` → `build` → capture visuelle → lecture des PNG.
+**Gate** : `typecheck` → `test` → `build` → captures → **lecture des PNG**.
 
 ---
 
 ## 3. Pièges rencontrés (ne pas les re-découvrir)
 
-1. **Cascade Tailwind.** Mes styles maison étaient hors `@layer`, donc
-   `button { color: inherit }` **écrasait** les utilitaires `text-ink-950`.
-   Tout CSS maison doit être dans `@layer base` ou `@layer components`.
-   → Symptôme : texte blanc sur fond blanc.
-2. **Grille et débordement.** Une grille `md:grid-cols-2` sans
-   `grid-rows-[minmax(0,1fr)]` laisse les paroles déborder de l'écran.
-3. **`Object-fit` des pochettes.** `33-Full.png` et `Ashes-15242_itemimage.jpg`
-   ont des parties sombres : ce n'est pas un bug de cadrage.
-4. **LRCLIB renvoie 503** sous la charge : le client réessaie (3 fois, back-off
-   `retry-after`). Le script de génération utilise 4 threads et `sleep` — ne pas
-   monter le parallélisme.
-5. **Filtres « No Vocals ».** Les noms de fichiers archive.org contiennent
-   `No_Vocals` / `Instrumental` : le filtre regex doit porter sur le nom
-   **nettoyé** (underscores → espaces), sinon les versions instrumentales
-   s'invitent dans le catalogue.
-6. **Playwright pip : impossible** (pas de wheel linux-aarch64). Selenium +
-   `geckodriver` + Firefox headless fonctionne
-   (`/tmp/opencode/geckodriver`, `/tmp/opencode/firefox/firefox`).
-7. **Erreur audio fantôme.** Firefox émet `MEDIA_ERR_DECODE` alors que la
-   lecture est nominale. Ne retenir l'erreur que si
-   `readyState < HAVE_CURRENT_DATA`, et la réinitialiser sur `playing`.
-8. **archive.org répond 500 par intermittence** (≈ 1 requête sur 10). Le
-   lecteur relance jusqu'à 3 fois avec un paramètre `vitr=<timestamp>` qui
-   passe d'un edge en cache défectueux. Sans ça, l'utilisateur voit
-   « Morceau indisponible » sur un flux parfaitement bon.
-9. **URL `blob:` volatiles.** Elles meurent au rechargement : la file
-   persistée en `localStorage` contenait des sources mortes. Resynchroniser via
-   `player.syncLocalTracks()` à chaque relecture de la bibliothèque.
-10. **Autoplay headless.** Un clic Selenium scripté n'est pas un « geste
-    utilisateur » : Firefox bloque la lecture. Passer
-    `media.autoplay.default = 0` dans les tests.
+1. **Cascade Tailwind.** Les styles maison hors `@layer` écrasent les
+   utilitaires (`button { color: inherit }` battait `text-ink-950`).
+   → Tout CSS maison est dans `@layer base` ou `@layer components`.
+2. **Grille et débordement.** `md:grid-cols-2` sans
+   `grid-rows-[minmax(0,1fr)]` → les paroles débordent de l'écran.
+3. **whisper.cpp dégrade les fichiers longs.** Le contexte glissant de 30 s
+   se contamine dès le premier jeton `[Musique]` : seul le premier quart est
+   transcrit. **Découper en blocs de 28 s avec 2 s de chevauchement.**
+4. **`-sns` décale les horodatages.** Supprimer le jeton non vocal chez
+   whisper décale les mots suivants. Filtrer côté serveur, pas dans l'outil.
+5. **VAD écrase la fin des segments.** `--vad` donne de bons début de phrase
+   mais tous les mots de queue partagent le même horodatage. Sans VAD.
+6. **`pkill -f` tue le shell appelant** si le motif contient le nom du
+   script. Filtrer sur `/proc/<pid>/cmdline`, exclure `$$` et `$PPID`.
+7. **Service local en CommonJS.** Le `package.json` de l'app impose
+   `"type": "module"` → `server/package.json` avec `"type": "commonjs"`.
+8. **Le service doit vivre dans la session proot** : `--kill-on-exit` tue
+   tout ce qui sort du groupe. D'où `server/supervise.sh`, lancé par
+   `/root/oc-session.sh`.
+9. **Firefox et `backdrop-filter`** : le verre dépoli laisse transparaître
+   le contenu. Les panneaux posés sur du contenu (dock) sont opaques
+   (`.dock-panel`).
+10. **Autoplay headless** : un clic Selenium scripté n'est pas un geste
+    utilisateur → `media.autoplay.default = 0` dans les tests.
+11. **archive.org répond 500 par intermittence** → le lecteur réessaie
+    3 fois avec un paramètre anti-cache.
 
 ---
 
-## 4. Vérification visuelle
+## 4. Vérification
 
 ```bash
-npm run preview &
-python3.13 scripts/visual-check.py tablette   # 1280x800
-python3.13 scripts/visual-check.py phone      # 430x900
+python3.13 scripts/acceptance.py [url]   # UI, import, lecture, paroles, capsules, file
+python3.13 scripts/test-capsules.py       # historique + rendu des capsules
+python3.13 scripts/test-paroles.py        # morceau sans paroles intégrées
+python3.13 scripts/test-theme.py          # thèmes clair et sombre
+python3.13 scripts/visual-check.py tablette
 ```
 
-Les PNG atterrissent dans `/tmp/opencode/vitrail-*.png`. **Il faut les lire** avec
-l'outil `read` avant d'affirmer quoi que ce soit sur le rendu.
-
-Le script vérifie aussi que l'audio joue (`window.__vitrailAudio`) : `paused`,
-`currentTime`, `readyState`, `error`.
+Les PNG atterrissent dans `/tmp/opencode/`. **Il faut les lire** avec l'outil
+`read` avant d'affirmer quoi que ce soit sur le rendu.
 
 ---
 
-## 5. Étape suivante : brancher Spotify
+## 5. Secrets
 
-Quand l'abonnement sera actif (règle Spotify de février 2026 : le propriétaire
-de l'app doit avoir **Premium**, sinon *tous* les appels API sont rejetés).
-
-1. Créer l'app sur <https://developer.spotify.com/dashboard> (gratuit).
-2. OAuth **Authorization Code with PKCE** : aucun secret serveur, les jetons
-   restent dans le navigateur. → l'app reste 100 % statique.
-3. Web Playback SDK : l'onglet devient un appareil **Spotify Connect**.
-   Bascule « lecteur / télécommande » selon l'appareil actif.
-4. Contraintes à respecter : `GET /search` max **10** résultats → paginer ;
-   requêtes groupées supprimées ; `popularity`/`followers`/`label` absents.
-
-Voir `README.md` §4 pour le détail.
-
----
-
-## 6. Secrets
-
-Aucun secret dans ce dépôt. Le `Client ID` Spotify viendra dans
-`/root/.config/vitrail/` (hors dépôt) quand l'app sera créée.
+Aucun secret dans ce dépôt. Le `Client ID` Spotify (si l'app y revient)
+viendra dans `/root/.config/vitrail/`, hors dépôt.

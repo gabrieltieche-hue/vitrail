@@ -77,17 +77,21 @@ try:
 
     # --- 3. UI : pas de chevauchement mini-lecteur / nav ----------------
     click_aria("Réduire")
-    time.sleep(2)
-    geometry = driver.execute_script(
-        """
-        const nav = [...document.querySelectorAll('nav')][0];
-        const dock = nav ? nav.parentElement : null;
-        const mini = dock ? [...dock.children].find(c => c !== nav && (c.className||'').toString().includes('glass-sheen')) : null;
-        if (!mini || !nav) return null;
-        const a = mini.getBoundingClientRect(), b = nav.getBoundingClientRect();
-        return { miniBottom: a.bottom, miniTop: a.top, navTop: b.top, navBottom: b.bottom, overlap: a.bottom > b.top + 1 };
-        """
-    )
+    geometry = None
+    for _ in range(20):
+        time.sleep(0.5)
+        geometry = driver.execute_script(
+            """
+            const nav = [...document.querySelectorAll('nav')][0];
+            const dock = nav ? nav.parentElement : null;
+            const mini = dock ? [...dock.children].find(c => c !== nav && (c.className||'').toString().includes('dock-panel')) : null;
+            if (!mini || !nav) return null;
+            const a = mini.getBoundingClientRect(), b = nav.getBoundingClientRect();
+            return { miniTop: Math.round(a.top), miniBottom: Math.round(a.bottom), navTop: Math.round(b.top), navBottom: Math.round(b.bottom), overlap: a.bottom > b.top + 1 };
+            """
+        )
+        if geometry:
+            break
     check("pas de chevauchement mini-lecteur/nav", geometry and not geometry["overlap"], str(geometry))
     driver.save_screenshot(str(OUT / "acc-4-dock.png"))
 

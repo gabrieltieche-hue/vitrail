@@ -5,6 +5,7 @@ import { player, usePlayer } from "@/audio/player"
 import { Artwork } from "@/components/Artwork"
 import {
   addToFamilyQueue,
+  isMixedContentBlocked,
   clearFamilyQueue,
   findService,
   getFamilyQueue,
@@ -84,9 +85,28 @@ export function FamilyQueuePanel() {
         <div>
           <p className="text-sm text-ink/60">Service de la famille injoignable</p>
           <p className="mt-1 text-sm leading-relaxed text-ink/40">
-            La file partagée et la transcription des paroles ont besoin du service local. Démarre-le avec
-            <span className="mx-1 rounded bg-surface-strong px-1.5 py-0.5 font-mono text-xs">bash /root/vitrail-server/service.sh start</span>
-            puis recharges cette page.
+            {isMixedContentBlocked() ? (
+              <>
+                Cette page est en HTTPS : le navigateur interdit d&apos;appeler une adresse HTTP locale.
+                Ouvre l&apos;app par l&apos;adresse du service local —
+                <span className="mx-1 rounded bg-surface-strong px-1.5 py-0.5 font-mono text-xs">
+                  http://127.0.0.1:8099
+                </span>
+                sur la tablette, ou
+                <span className="mx-1 rounded bg-surface-strong px-1.5 py-0.5 font-mono text-xs">
+                  http://192.168.1.114:8099
+                </span>
+                depuis les autres appareils du réseau.
+              </>
+            ) : (
+              <>
+                La file partagée et la transcription des paroles ont besoin du service local. Démarre-le avec
+                <span className="mx-1 rounded bg-surface-strong px-1.5 py-0.5 font-mono text-xs">
+                  bash /root/vitrail/server/service.sh start
+                </span>
+                puis recharges cette page.
+              </>
+            )}
           </p>
         </div>
       </div>

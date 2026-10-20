@@ -20,19 +20,19 @@ stop() {
     rm -f "$PIDFILE"
   fi
 
-  # Instances orphelines. On ne compare que la LIGNE DE COMMANDE exacte :
-  # un motif large ("vitrail") matcherait le shell appelant lui-même et le
-  # tuerait — le piège classique du `pkill -f`.
-  local pid exe arg
+  # Instances orphelines. On s'appuie sur /proc/<pid>/exe pour savoir que
+  # c'est bien node, et on lit la ligne de commande telle quelle.
+  # (Un `read -a` sur /proc/.../cmdline renvoie 1 en fin de fichier : c'est
+  # pour ça qu'on ne l'utilise pas ici.)
+  local pid exe cmd
   for pid in $(ls /proc 2>/dev/null | grep -E "^[0-9]+$"); do
     [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
     [[ -r "/proc/$pid/cmdline" ]] || continue
-    IFS=$'\0' read -r -a argv < "/proc/$pid/cmdline" 2>/dev/null || continue
-    exe="${argv[0]:-}"
-    arg="${argv[1]:-}"
-    [[ "$exe" == */node || "$exe" == node ]] || continue
-    case "$arg" in
-      *vitrail*server.js|*vitrail*server.cjs) kill "$pid" 2>/dev/null || true ;;
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || echo "")
+    [[ "$(basename "${exe:-}")" == "node" ]] || continue
+    cmd=$(tr "\0" " " < "/proc/$pid/cmdline" 2>/dev/null || echo "")
+    case "$cmd" in
+      *vitrail*server.js*|*vitrail*server.cjs*) kill "$pid" 2>/dev/null || true ;;
     esac
   done
   sleep 1
