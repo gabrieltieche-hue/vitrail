@@ -87,3 +87,71 @@ ses morceaux). L'app devient un lecteur local avec un service de famille.
 1. Partage explicite d'un import vers la bibliothèque de la famille.
 2. Rétrospective hebdomadaire des capsules.
 3. Pochettes de la bibliothèque de famille dans la file partagée.
+
+---
+
+## SESSION — 2026-10-21 (v0.4 : catalogue, recherche, streaming, telechargements)
+
+### Résumé
+
+Demande : « tout doit passer sur ma tablette, on doit pouvoir chercher des
+chansons, meme si on ne l'a pas on la propose, on peut la telecharger avec
+yt-dlp, sans surcharger la RAM, et que ce soit ULTRA RAPIDE ».
+
+L'app est donc devenue un **lecteur de catalogue local** : elle interroge
+l'installation notube-batch deja presente sur la machine (2 000 titres, son
+journal de telechargements, le Drive) au lieu d'un catalogue distant.
+
+### Décisions
+
+- **Aucune nouvelle logique de téléchargement.** Le service délègue à
+  `notube_batch.py` (3 moteurs en cascade, reprise, upload Drive) avec `--out`
+  et `--drive-folder` **dedies** : les lots de l'utilisateur ne sont jamais
+  perturbes. Repli sur `yt-dlp` en direct si le job échoue.
+- **Identifiant canonique = identifiant vidéo.** Le journal `state.json` utilise
+  des clés hachées, le Drive déduplique l'id du nom de fichier : sans
+  unification, chaque morceau existait en double, dont une entrée sans accès
+  disque.
+- **Index inversé en mémoire** pour la recherche : 20-45 ms à froid, au lieu de
+  1,3 s en balayage exhaustif.
+- **Aucune copie pour la lecture** : relais des requêtes `Range` vers la
+  source. RAM du service : ~90 Mo, index compris.
+- **API iTunes** (publique, sans clé) pour pochettes et durées exactes.
+
+### Vérifications
+
+- Recherche « gims » : 19 résultats, avec rang et badge « Téléchargé ».
+- Recherche à froid après redémarrage : 45 ms.
+- Streaming local : **206**, `Content-Range: bytes 0-300000/6145868`,
+  `Accept-Ranges: bytes`, données MP3 valides.
+- Téléchargement de bout en bout : « DADJU - Reine » téléchargé via yt-dlp
+  (6,4 Mo) et envoyé sur `gdrive:Vitrail/`, journal « 1 telecharge(s) |
+  0 echec(s) ».
+- 1 844 morceaux uniques indexés (catalog 2 000, téléchargés 969, Drive 961).
+
+### Pièges rencontrés
+
+25. **Quota de l'API Google Drive** (`403 Quota exceeded`, requêtes par
+    minute) : l'index saturait le quota en listant le Drive à chaque
+    démarrage, et rclone devenait muet. → liste mise en cache une heure,
+    `--tpslimit 4`, index reconstruit toutes les 30 min au lieu de
+    systématiquement.
+26. **Cache de répertoire de rclone périmé** : un fichier téléversé
+    récemment n'était pas dans le listing → 404. → repli sur
+    `rclone cat --offset --count`.
+27. **`spawnedDrive`** interdisait la relance de rclone après un arrêt.
+28. **`lsf --format json`** n'existe pas dans rclone 1.60 : c'est `lsjson`.
+29. **Correspondances partielles trop permises** : un jeton d'une lettre (« g »)
+    faisait matcher la moitié de l'index → 20 s de recherche. → plancher de
+    3 caractères.
+30. **Chemin Drive non encodé** dans l'URL → 404 (espaces, accents).
+31. **`rclone serve` met ~15 s à démarrer** (il liste le Drive) : le service
+    le démarre après la construction de l'index, qui réchauffe le cache.
+32. **`*/` dans un commentaire JS** (`dl_*/state.json`) ferme le commentaire →
+    SyntaxError. Piège classique.
+
+### Suite
+
+1. Rétrospective hebdomadaire des capsules.
+2. Partage d'un import vers la bibliothèque de la famille.
+3. Tri et filtres dans la recherche.

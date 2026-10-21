@@ -60,7 +60,44 @@ explicitement où aller.
 
 ---
 
-## 3. Les paroles : la cascade
+## 3. Le catalogue : chercher, proposer, télécharger
+
+L'app interroge **ton** installation, pas un catalogue distant :
+
+| Source | Contenu |
+|---|---|
+| `notube-batch/urls_*.csv` | 2 000 titres (artiste, titre, URL, rang) |
+| `notube-batch/dl_*/state.json` | ce que tu as déjà téléchargé |
+| `gdrive:Notube` | ~960 fichiers sur le Drive |
+| dossiers des lots | fichiers encore en local |
+
+Tout est fusionné dans **un index en mémoire** (identifiant vidéo = identifiant
+canonique), avec un index inversé par jeton : la recherche répond en **20 à
+45 ms**, à froid compris, et jamais par appel réseau.
+
+**Recherche.** Un champ unique interroge l'index. Si le résultat est mince, un
+bouton « Chercher aussi en ligne » passe par ton `yt-dlp` (`ytsearch:`), ~10 s
+la première fois puis mis en cache.
+
+**Proposition.** Les titres du catalogue qui ne sont pas encore téléchargés
+sont proposés avec leur rang et un bouton « Télécharger ».
+
+**Téléchargement.** Le service crée un job et **délègue à ton
+`notube_batch.py`**, avec un dossier de sortie et un dossier Drive dédiés
+(`--out`, `--drive-folder Vitrail`) pour ne pas entrer en conflit avec tes
+lots. Si le job échoue, il est relancé en `yt-dlp` direct.
+
+**Lecture.** Le service relaie les requêtes `Range` vers la source (fichier
+local, sinon Drive via rclone) : **aucune copie**, la RAM ne bouge pas. Le
+service pèse ~90 Mo, l'index compris.
+
+**Pochettes.** L'API publique iTunes (sans clé) fournit pochette et durée
+exacte, à la demande pour les résultats affichés et en tâche de fond pour le
+reste du catalogue.
+
+---
+
+## 4. Les paroles : la cascade
 
 | Ordre | Source | Latence | Qualité |
 |---|---|---|---|
@@ -94,7 +131,7 @@ homonyme est écarté : si l'artiste est connu, il doit correspondre.
 
 ---
 
-## 4. Lancer
+## 5. Lancer
 
 ```bash
 npm install
@@ -116,7 +153,7 @@ proot, voir `server/README.md`).
 
 ---
 
-## 5. Vérification
+## 6. Vérification
 
 ```bash
 python3.13 scripts/acceptance.py     # UI, import, lecture, paroles, capsules, file
@@ -128,7 +165,7 @@ python3.13 scripts/visual-check.py tablette   # captures de l'interface
 
 ---
 
-## 6. Ce qui est volontairement absent
+## 7. Ce qui est volontairement absent
 
 - Aucun téléchargement depuis YouTube, aucun contournement de publicité,
   aucune source non autorisée.
@@ -140,8 +177,8 @@ python3.13 scripts/visual-check.py tablette   # captures de l'interface
 
 ---
 
-## 7. Prochaines étapes
+## 8. Prochaines étapes
 
-1. Partage explicite d'un morceau importé vers la bibliothèque de la famille.
-2. Rétrospective hebdomadaire des capsules (le plus joué, la série en cours).
-3. Pochettes de la bibliothèque de famille dans la file partagée.
+1. Rétrospective hebdomadaire des capsules (le plus joué, la série en cours).
+2. Partage explicite d'un morceau importé vers la bibliothèque de la famille.
+3. Tri et filtres dans l'interface de recherche (par artiste, par rang).
