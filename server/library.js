@@ -127,47 +127,143 @@ async function readCatalogCsv(file) {
 const DRIVE_CACHE_FILE = path.join(DATA_DIR, "drive-listing.json")
 const DRIVE_CACHE_TTL = 1000 * 60 * 60
 
+/**
+ * Racines de lecture : un dossier peut porter un nom ambigu.
+ *
+ * Sur le Drive, il existe DEUX dossiers « France ». Un chemin par nom est
+ * donc ambigu : rclone résout « France » vers le mauvais (2 fichiers), et
+ * les 523 autres deviennent introuvables — d'où les « lectures impossibles ».
+ *
+ * Chaque racine est donc identifiee par son ID, et l'index retient la racine
+ * qui sert chaque fichier.
+ */
+const ROOTS = new Map()
+
+/** Racine principale : le dossier Notube, par son chemin. */
+const ROOT_MAIN = "main"
+
+function rootFor(spec) {
+  if (!ROOTS.has(spec)) {
+    ROOTS.set(spec, {
+      spec,
+      rclonePath: spec === ROOT_MAIN ? DRIVE_REMOTE : "gdrive:",
+      rootFolderId: spec === ROOT_MAIN ? null : spec.replace(/^f-/, ""),
+      port: null,
+    })
+  }
+  return ROOTS.get(spec)
+}
+
+function roots() {
+  return [...ROOTS.values()]
+}
+
+async function lsjson(path, rootFolderId) {
+  const args = ["lsjson", path]
+  if (rootFolderId) args.push("--drive-root-folder-id", rootFolderId)
+  const result = await run(RCLONE, args, 120000)
+  if (result.code !== 0) return []
+  try {
+    const parsed = JSON.parse(result.stdout)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Liste le contenu du Drive en distinguant les dossiers de même nom.
+ * Chaque fichier reçoit `driveRoot` (la racine qui le sert) et `driveUrl`
+ * (son chemin HTTP relatif à cette racine).
+ */
 async function listDrive() {
   try {
     const cached = JSON.parse(await fsp.readFile(DRIVE_CACHE_FILE, "utf8"))
     if (Date.now() - (cached.at ?? 0) < DRIVE_CACHE_TTL && Array.isArray(cached.files)) {
+      // Les racines sont mises en cache avec la liste : sans elles, le
+      // service ne saurait pas quel serveur rclone lire.
+      for (const spec of cached.roots ?? []) {
+        const root = rootFor(spec.spec)
+        root.rclonePath = spec.rclonePath
+        root.rootFolderId = spec.rootFolderId
+      }
       return cached.files
     }
   } catch {
     /* pas de cache */
   }
 
-  // `lsf --format json` n'existe pas dans cette version de rclone :
-  // c'est `lsjson` qui rend du JSON complet (chemin, taille, date).
-  const result = await run(RCLONE, ["lsjson", DRIVE_REMOTE, "--recursive"], 120000)
-  if (result.code !== 0) {
-    const fallback = await run(RCLONE, ["lsf", DRIVE_REMOTE, "--recursive", "--files-only"], 120000)
-    if (fallback.code !== 0) {
-      // On garde l'ancien cache : mieux vaut un index légèrement périmé
-      // qu'un index vide.
-      try {
-        const previous = JSON.parse(await fsp.readFile(DRIVE_CACHE_FILE, "utf8"))
-        if (Array.isArray(previous.files)) return previous.files
-      } catch {
-        /* rien */
-      }
-      return []
+  const files = []
+  const seen = new Set()
+
+  const walk = async (spec, prefix, depth) => {
+    if (depth > 3) return
+    const root = rootFor(spec)
+    const target = root.rootFolderId ? root.rclonePath : `${root.rclonePath}/${prefix}`
+    const entries = await lsjson(target, root.rootFolderId)
+
+    // Dossiers de même nom : on les distingue par leur ID.
+    const byName = new Map()
+    for (const entry of entries) {
+      if (!entry.IsDir) continue
+      const list = byName.get(entry.Path) ?? []
+      list.push(entry)
+      byName.set(entry.Path, list)
     }
-    const files = fallback.stdout
-      .split(/\r?\n/)
-      .filter(line => line.trim())
-      .map(line => ({ Path: line.trim(), Name: path.basename(line.trim()), Size: 0 }))
-    await fsp.writeFile(DRIVE_CACHE_FILE, JSON.stringify({ at: Date.now(), files })).catch(() => undefined)
-    return files
+
+    for (const entry of entries) {
+      if (entry.IsDir) continue
+      if (!/\.(mp3|m4a|aac|flac|ogg|opus|wav)$/i.test(entry.Path || "")) continue
+      const path = prefix ? `${prefix}/${entry.Path}` : entry.Path
+      if (seen.has(path)) continue
+      seen.add(path)
+      files.push({
+        Path: path,
+        Name: entry.Name,
+        Size: entry.Size,
+        ModTime: entry.ModTime,
+        driveRoot: spec,
+        driveUrl: `/${path}`,
+        driveRemote: root.rootFolderId
+          ? `gdrive:${root.rootFolderId}/${entry.Path}`
+          : `${DRIVE_REMOTE}/${path}`,
+      })
+    }
+
+    for (const [name, list] of byName) {
+      for (const dir of list) {
+        if (list.length === 1) {
+          // Nom unique : le chemin par nom suffit.
+          await walk(spec, prefix ? `${prefix}/${name}` : name, depth + 1)
+        } else {
+          // Nom ambigu : on passe par l'ID du dossier.
+          const childSpec = `f-${dir.ID}`
+          const childRoot = rootFor(childSpec)
+          childRoot.rclonePath = "gdrive:"
+          childRoot.rootFolderId = dir.ID
+          await walk(childSpec, "", depth + 1)
+        }
+      }
+    }
   }
-  try {
-    const parsed = JSON.parse(result.stdout)
-    const files = Array.isArray(parsed) ? parsed : []
-    await fsp.writeFile(DRIVE_CACHE_FILE, JSON.stringify({ at: Date.now(), files })).catch(() => undefined)
-    return files
-  } catch {
-    return []
-  }
+
+  await walk(ROOT_MAIN, "", 0)
+
+  await fsp
+    .writeFile(
+      DRIVE_CACHE_FILE,
+      JSON.stringify({
+        at: Date.now(),
+        files,
+        roots: roots().map(root => ({
+          spec: root.spec,
+          rclonePath: root.rclonePath,
+          rootFolderId: root.rootFolderId,
+        })),
+      }),
+    )
+    .catch(() => undefined)
+  return files
 }
 
 // ------------------------------------------------------------------ construction
@@ -192,13 +288,18 @@ async function buildIndex() {
 
   const add = track => {
     if (!track.title && !track.artist) return
-    const id = track.id
-    const existing = tracks.get(id)
+    const existing = tracks.get(track.id)
     if (existing) {
-      Object.assign(existing, { ...existing, ...track })
+      // Une valeur vide ne doit jamais écraser une information déjà connue :
+      // l'URL YouTube, l'artiste, la pochette… Le fusionnement se fait donc
+      // en ignorant les champs vides.
+      for (const [key, value] of Object.entries(track)) {
+        if (value === "" || value === null || value === undefined) continue
+        existing[key] = value
+      }
       return
     }
-    tracks.set(id, track)
+    tracks.set(track.id, track)
   }
 
   // 1. Catalogue (propositions)
@@ -227,7 +328,17 @@ async function buildIndex() {
   }
   sources.catalog = catalogCount
 
-  // 2. État des téléchargements
+  // 2. Fichiers du Drive
+  //    La liste est connue avant le journal d'état : un dossier peut porter
+  //    un nom ambigu (« France »), et il faut le chemin exact (dossier par
+  //    son ID) pour un morceau téléchargé.
+  const driveFiles = await listDrive()
+  const driveByName = new Map()
+  for (const file of driveFiles) {
+    driveByName.set(file.Name, file)
+  }
+
+  // 3. État des téléchargements
   let downloadedCount = 0
   for (const lot of ["dl_france", "dl_international"]) {
     const state = await fsp
@@ -243,6 +354,14 @@ async function buildIndex() {
       // déduit de l'URL, sinon le même morceau existe en double (une
       // entrée Drive sans accès disque, une entrée locale).
       const videoId = videoIdFrom(item.url, base, stateKey)
+      // Le chemin HTTP du serveur rclone se déduit du chemin rclone : le
+      // préfixe du distant (« gdrive:Notube ») devient la racine du serveur.
+      const driveRelative = item.drive
+        ? String(item.drive).replace(/^[^:]+:[^/]*\/?/, "")
+        : null
+      // Le dossier peut porter un nom ambigu (« France ») : on récupère le
+      // chemin exact (dossier par son ID) depuis la liste du Drive.
+      const driveEntry = driveByName.get(path.basename(base))
       add({
         id: trackId(videoId),
         title: stripDecorations(title),
@@ -253,6 +372,11 @@ async function buildIndex() {
         url: item.url || "",
         localPath: item.file && fs.existsSync(item.file) ? item.file : null,
         drivePath: item.drive || null,
+        ...(driveEntry
+          ? { driveRemote: driveEntry.driveRemote, driveUrl: driveEntry.driveUrl }
+          : driveRelative
+            ? { driveUrl: `/${driveRelative}` }
+            : {}),
         available: true,
         downloadable: false,
         source: "notube",
@@ -263,10 +387,8 @@ async function buildIndex() {
   }
   sources.downloaded = downloadedCount
 
-  // 3. Fichiers du Drive
-  const driveFiles = await listDrive()
+  // 4. Fichiers présents sur le Drive
   for (const file of driveFiles) {
-    if (!/\.(mp3|m4a|aac|flac|ogg|opus|wav)$/i.test(file.Path || "")) continue
     const name = path.basename(file.Path || "")
     const title = stripDecorations(name.replace(/\.[a-z0-9]+$/i, ""))
     const videoId = videoIdFrom("", name, null)
@@ -278,8 +400,10 @@ async function buildIndex() {
       durationSec: 0,
       artwork: "",
       url: "",
-      drivePath: `${DRIVE_REMOTE}/${file.Path}`,
-      driveUrl: `/${file.Path}`,
+      drivePath: file.driveRemote || `${DRIVE_REMOTE}/${file.Path}`,
+      driveRemote: file.driveRemote || `${DRIVE_REMOTE}/${file.Path}`,
+      driveUrl: file.driveUrl || `/${file.Path}`,
+      driveRoot: file.driveRoot || "main",
       size: file.Size || 0,
       available: true,
       downloadable: false,
@@ -289,7 +413,7 @@ async function buildIndex() {
   }
   sources.drive = driveFiles.length
 
-  // 4. Fichiers locaux des téléchargements en cours
+  // 5. Fichiers locaux des téléchargements en cours
   for (const lot of ["dl_france", "dl_international"]) {
     const dir = path.join(NOTUBE_DIR, lot)
     const names = await fsp.readdir(dir).catch(() => [])
@@ -644,4 +768,7 @@ module.exports = {
   NOTUBE_DIR,
   DATA_DIR,
   INDEX_FILE,
+  roots,
+  rootFor,
+  ROOT_MAIN,
 }

@@ -182,10 +182,26 @@ class PlayerEngine {
       return
     }
 
+    const track = this.current()
+
+    // L'URL signée du CDN expire (quelques heures). On demande au service
+    // une URL fraîche et on réessaie, sans jamais dire « Lecture impossible ».
+    if (track && /\/api\/stream\//.test(track.audio) && this.retryCount < 3) {
+      this.retryCount += 1
+      this.emit({ loading: true, error: null })
+      const separator = track.audio.includes("?") ? "&" : "?"
+      const fresh = `${track.audio}${separator}fresh=1&try=${this.retryCount}`
+      window.setTimeout(() => {
+        audio.src = fresh
+        audio.load()
+        this.startPlayback()
+      }, 400 * this.retryCount)
+      return
+    }
+
     // archive.org répond parfois 500 sur un flux : on relance avec une URL
     // légèrement différente pour passer d'un edge en cache défectueux.
-    const track = this.current()
-    if (track && this.retryCount < 3 && !track.audio.startsWith("blob:")) {
+    if (track && this.retryCount < 3 && !track.audio.startsWith("blob:") && !/\/api\/stream\//.test(track.audio)) {
       this.retryCount += 1
       this.emit({ loading: true, error: null })
       if (this.retryTimer !== null) window.clearTimeout(this.retryTimer)

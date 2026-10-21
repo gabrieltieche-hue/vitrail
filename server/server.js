@@ -24,6 +24,7 @@ const crypto = require("node:crypto")
 const library = require("./library")
 const downloads = require("./downloads")
 const artwork = require("./artwork")
+const streamUrl = require("./streamUrl")
 
 
 const PORT = Number(process.env.VITRAIL_PORT || 8099)
@@ -610,15 +611,33 @@ const server = http.createServer(async (req, res) => {
         json(res, 404, { error: "Morceau introuvable" })
         return
       }
+      // 1. Un fichier vraiment présent sur la machine.
       if (track.localPath && fs.existsSync(track.localPath)) {
         await streamLocalFile(req, res, track.localPath, mimeFor(track.localPath))
         return
       }
-      if (track.driveUrl) {
-        await streamFromDrive(req, res, track.driveUrl, track.localPath)
+      // 2. Le flux audio officiel, lu sur le CDN : rien n'est stocké, rien
+      //    n'est envoyé sur le Drive, et le seek est instantané.
+      if (track.url) {
+        const direct = await streamUrl.resolveAudioUrl(track.url, {
+          force: url.searchParams.get("fresh") === "1",
+        })
+        if (direct) {
+          res.writeHead(302, {
+            Location: direct,
+            "Cache-Control": "private, max-age=300",
+            "Access-Control-Allow-Origin": "*",
+          })
+          res.end()
+          return
+        }
+      }
+      // 3. En dernier recours : le fichier déjà sur le Drive.
+      if (track.driveRemote) {
+        await streamFromDrive(req, res, track.driveRemote, track.localPath)
         return
       }
-      json(res, 404, { error: "Fichier introuvable (téléchargement requis)" })
+      json(res, 404, { error: "Flux indisponible pour ce morceau" })
       return
     }
 
@@ -958,6 +977,21 @@ async function streamLocalFile(req, res, file, contentType) {
 }
 
 /**
+ * Encodage strict d'un segment de chemin.
+ *
+ * `encodeURIComponent` laisse l'apostrophe et les parenthèses tels quels :
+ * `Céline Dion - Pour que tu m'aimes encore (Vidéo...)` partait avec des
+ * `'` et des `(`, et rclone répondait 404. On encode tout ce qui doit
+ * l'être.
+ */
+function encodeSegment(segment) {
+  return encodeURIComponent(segment).replace(
+    /[!'()*]/g,
+    character => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  )
+}
+
+/**
  * Relit un fichier du Google Drive.
  *
  * Deux chemins :
@@ -965,61 +999,23 @@ async function streamLocalFile(req, res, file, contentType) {
  *     réinterroger le Drive) ;
  *  2. `rclone cat` en repli : le cache de répertoire de rclone peut être
  *     périmé (le fichier a été téléversé récemment), et la lecture directe
- *     n'en dépend pas.
+ *     n'en dépend pas — mais elle est nettement plus lente.
  *
  * Dans les deux cas, le flux traverse le service sans être copié.
  */
-async function streamFromDrive(req, res, driveUrl, localFallback) {
-  // Si le fichier existe en local (cache rclone ou lot en cours), on le sert
-  // directement : c'est plus rapide que de repasser par Drive.
+/**
+ * En dernier recours : lecture d'un fichier deja sur le Drive.
+ *
+ * On passe par `rclone cat` avec le chemin du dossier PAR SON ID : le Drive
+ * porte deux dossiers du meme nom (« France »), et un chemin par nom est
+ * donc ambigu — c'est ce qui rendait les fichiers introuvables.
+ */
+async function streamFromDrive(req, res, driveRemote, localFallback) {
   if (localFallback && fs.existsSync(localFallback)) {
     await streamLocalFile(req, res, localFallback, mimeFor(localFallback))
     return
   }
 
-  const encoded = String(driveUrl)
-    .split("/")
-    .map(segment => encodeURIComponent(segment))
-    .join("/")
-  const target = `${library.DRIVE_SERVE}${encoded}`
-
-  try {
-    const upstream = await fetch(target, {
-      headers: req.headers.range ? { Range: req.headers.range } : {},
-    })
-    if (upstream.ok || upstream.status === 206) {
-      const headers = {
-        "Content-Type": upstream.headers.get("content-type") || "audio/mpeg",
-        "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, max-age=3600",
-      }
-      const length = upstream.headers.get("content-length")
-      const contentRange = upstream.headers.get("content-range")
-      if (length) headers["Content-Length"] = length
-      if (contentRange) headers["Content-Range"] = contentRange
-      res.writeHead(upstream.status === 206 ? 206 : 200, headers)
-      const reader = upstream.body.getReader()
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        if (!res.write(Buffer.from(value))) {
-          await new Promise(resolve => res.once("drain", resolve))
-        }
-      }
-      res.end()
-      return
-    }
-  } catch {
-    /* on tente le repli */
-  }
-
-  await streamFromDriveWithCat(req, res, driveUrl)
-}
-
-/** Repli : lecture directe dans le Drive, par offset et longueur. */
-async function streamFromDriveWithCat(req, res, driveUrl) {
-  const remote = `${library.DRIVE_REMOTE}${driveUrl}`
   const range = req.headers.range
   let offset = 0
   let count = null
@@ -1034,12 +1030,11 @@ async function streamFromDriveWithCat(req, res, driveUrl) {
   const args = ["cat"]
   if (offset > 0) args.push("--offset", String(offset))
   if (count !== null) args.push("--count", String(count))
-  args.push(remote)
+  args.push(driveRemote)
 
   const child = spawn("rclone", args, { stdio: ["ignore", "pipe", "ignore"] })
-
   res.writeHead(range ? 206 : 200, {
-    "Content-Type": mimeFor(driveUrl),
+    "Content-Type": mimeFor(driveRemote),
     "Accept-Ranges": "bytes",
     "Access-Control-Allow-Origin": "*",
     "Cache-Control": "public, max-age=3600",
