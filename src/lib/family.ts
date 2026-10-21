@@ -96,7 +96,7 @@ export function isMixedContentBlocked(): boolean {
   return true
 }
 
-async function probe(url: string, timeoutMs = 1500): Promise<boolean> {
+async function probe(url: string, timeoutMs = 4000): Promise<boolean> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {

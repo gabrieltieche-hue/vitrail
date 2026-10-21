@@ -21,6 +21,11 @@ const os = require("node:os")
 const { spawn } = require("node:child_process")
 const crypto = require("node:crypto")
 
+const library = require("./library")
+const downloads = require("./downloads")
+const artwork = require("./artwork")
+
+
 const PORT = Number(process.env.VITRAIL_PORT || 8099)
 const DATA_DIR = process.env.VITRAIL_DATA || "/root/vitrail-data"
 const DIST_DIR = process.env.VITRAIL_DIST || "/root/vitrail/dist"
@@ -547,6 +552,99 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
+    // -- recherche dans l'index local ------------------------------------
+    if (route === "/api/library/search" && req.method === "GET") {
+      await library.ensureIndex()
+      const query = url.searchParams.get("q") || ""
+      const limit = Math.min(200, Number(url.searchParams.get("limit")) || 60)
+      json(res, 200, { query, results: library.search(query, limit) })
+      return
+    }
+
+    if (route === "/api/library/lookup" && req.method === "GET") {
+      // Pochette et durée exacte pour un morceau (API iTunes, mise en cache).
+      const title = url.searchParams.get("title") || ""
+      const artist = url.searchParams.get("artist") || ""
+      const result = await artwork.lookup({ title, artist })
+      json(res, 200, result || {})
+      return
+    }
+
+    if (route === "/api/library/youtube" && req.method === "GET") {
+      const query = url.searchParams.get("q") || ""
+      const limit = Math.min(25, Number(url.searchParams.get("limit")) || 12)
+      json(res, 200, await library.searchYoutube(query, limit))
+      return
+    }
+
+    if (route === "/api/library/refresh" && req.method === "POST") {
+      const built = await library.ensureIndex({ force: true })
+      json(res, 200, {
+        tracks: built.tracks.length,
+        sources: built.sources,
+        buildMs: built.buildMs,
+      })
+      return
+    }
+
+    const trackMatch = route.match(/^\/api\/library\/track\/(.+)$/)
+    if (trackMatch && req.method === "GET") {
+      await library.ensureIndex()
+      const track = library.getTrack(decodeURIComponent(trackMatch[1]))
+      if (!track) {
+        json(res, 404, { error: "Morceau introuvable" })
+        return
+      }
+      json(res, 200, { track })
+      return
+    }
+
+    // -- flux audio -------------------------------------------------------
+    // Le service ne copie rien : il relaie les requêtes Range vers la
+    // source (disque local ou Drive via rclone). La RAM ne bouge pas.
+    const streamMatch = route.match(/^\/api\/stream\/(.+)$/)
+    if (streamMatch && req.method === "GET") {
+      await library.ensureIndex()
+      const track = library.getTrack(decodeURIComponent(streamMatch[1]))
+      if (!track) {
+        json(res, 404, { error: "Morceau introuvable" })
+        return
+      }
+      if (track.localPath && fs.existsSync(track.localPath)) {
+        await streamLocalFile(req, res, track.localPath, mimeFor(track.localPath))
+        return
+      }
+      if (track.driveUrl) {
+        await streamFromDrive(req, res, track.driveUrl, track.localPath)
+        return
+      }
+      json(res, 404, { error: "Fichier introuvable (téléchargement requis)" })
+      return
+    }
+
+    // -- téléchargements ---------------------------------------------------
+    if (route === "/api/jobs" && req.method === "GET") {
+      json(res, 200, { jobs: downloads.listJobs() })
+      return
+    }
+
+    if (route === "/api/download" && req.method === "POST") {
+      const meta = readMetadata(req)
+      if (!meta.url) {
+        json(res, 400, { error: "URL manquante" })
+        return
+      }
+      const id = meta.id || `yt-${String(meta.url).match(/[?&]v=([\w-]+)/)?.[1] || Date.now()}`
+      const job = downloads.enqueue({
+        id,
+        url: meta.url,
+        title: meta.title || "",
+        artist: meta.artist || "",
+      })
+      json(res, 202, { job })
+      return
+    }
+
     // -- santé ------------------------------------------------------------
     if (route === "/api/health") {
       const items = await listLibrary()
@@ -819,6 +917,95 @@ async function serveStatic(req, res, pathname) {
   fs.createReadStream(file).pipe(res)
 }
 
+function mimeFor(file) {
+  const ext = path.extname(file || "").toLowerCase()
+  if (ext === ".m4a" || ext === ".aac") return "audio/mp4"
+  if (ext === ".flac") return "audio/flac"
+  if (ext === ".ogg" || ext === ".opus") return "audio/ogg"
+  if (ext === ".wav") return "audio/wav"
+  return "audio/mpeg"
+}
+
+/** Relit un fichier local en gérant les requêtes Range (lecture à la volée). */
+async function streamLocalFile(req, res, file, contentType) {
+  const stat = await fsp.stat(file)
+  const range = req.headers.range
+  const headers = {
+    "Content-Type": contentType,
+    "Accept-Ranges": "bytes",
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "public, max-age=3600",
+  }
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range)
+    const start = match && match[1] ? Number(match[1]) : 0
+    const end = match && match[2] ? Number(match[2]) : stat.size - 1
+    if (start >= stat.size) {
+      res.writeHead(416, { "Content-Range": `bytes */${stat.size}` })
+      res.end()
+      return
+    }
+    res.writeHead(206, {
+      ...headers,
+      "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+      "Content-Length": end - start + 1,
+    })
+    fs.createReadStream(file, { start, end }).pipe(res)
+    return
+  }
+  res.writeHead(200, { ...headers, "Content-Length": stat.size })
+  fs.createReadStream(file).pipe(res)
+}
+
+/**
+ * Relit un fichier du Google Drive en passant par le serveur HTTP de rclone
+ * (qui gère les Range et son cache disque LRU). Rien n'est copié : le flux
+ * traverse le service en direct.
+ */
+async function streamFromDrive(req, res, driveUrl, localFallback) {
+  // Si le fichier existe en local (cache rclone ou lot en cours), on le sert
+  // directement : c'est plus rapide que de repasser par Drive.
+  if (localFallback && fs.existsSync(localFallback)) {
+    await streamLocalFile(req, res, localFallback, mimeFor(localFallback))
+    return
+  }
+
+  // Le chemin du Drive contient des espaces et des accents : il doit être
+  // encodé pour l'URL, sinon rclone ne trouve pas le fichier.
+  const encoded = String(driveUrl)
+    .split("/")
+    .map(segment => encodeURIComponent(segment))
+    .join("/")
+  const target = `${library.DRIVE_SERVE}${encoded}`
+  const upstream = await fetch(target, {
+    headers: req.headers.range ? { Range: req.headers.range } : {},
+  })
+  if (!upstream.ok && upstream.status !== 206) {
+    json(res, upstream.status === 404 ? 404 : 502, { error: "Flux Drive indisponible" })
+    return
+  }
+  const headers = {
+    "Content-Type": upstream.headers.get("content-type") || "audio/mpeg",
+    "Accept-Ranges": "bytes",
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "public, max-age=3600",
+  }
+  const length = upstream.headers.get("content-length")
+  const contentRange = upstream.headers.get("content-range")
+  if (length) headers["Content-Length"] = length
+  if (contentRange) headers["Content-Range"] = contentRange
+  res.writeHead(upstream.status === 206 ? 206 : 200, headers)
+  const reader = upstream.body.getReader()
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    if (!res.write(Buffer.from(value))) {
+      await new Promise(resolve => res.once("drain", resolve))
+    }
+  }
+  res.end()
+}
+
 function readJsonBody(req) {
   return readMetadata(req)
 }
@@ -906,6 +1093,69 @@ function lanAddress() {
   return null
 }
 
+/**
+ * Le contenu du Google Drive est servi par rclone, qui gère les requêtes
+ * Range et un cache disque borné (200 Mo) : la lecture est instantanée et
+ * la RAM de la tablette ne bouge pas.
+ */
+let rcloneProcess = null
+let spawnedDrive = false
+
+function startDriveServer() {
+  if (rcloneProcess) return
+  // Un serveur rclone qui tourne déjà (relance du service) est réutilisé
+  // tel quel : sinon le nouveau se heurte au port occupé.
+  const probe = require("node:http").get(`${library.DRIVE_SERVE}/`, response => {
+    response.resume()
+    console.log("[vitrail] serveur Drive déjà en place, réutilisé")
+  })
+  probe.on("error", () => spawnDrive())
+  probe.setTimeout(2500, () => {
+    probe.destroy()
+  })
+}
+
+function spawnDrive() {
+  if (rcloneProcess) return
+  if (spawnedDrive) return
+  spawnedDrive = true
+  const args = [
+    "serve",
+    "http",
+    library.DRIVE_REMOTE,
+    "--addr",
+    "127.0.0.1:8091",
+    "--vfs-cache-mode",
+    "minimal",
+    "--vfs-cache-max-size",
+    "200M",
+    "--vfs-cache-max-age",
+    "24h",
+    "--vfs-read-chunk-size-limit",
+    "128M",
+    "--dir-cache-time",
+    "30m",
+    // L'API Drive est limitée en requêtes par minute : on reste poli.
+    "--tpslimit",
+    "4",
+    "--tpslimit-burst",
+    "8",
+  ]
+  const child = spawn("rclone", args, { stdio: ["ignore", "ignore", "pipe"] })
+  rcloneProcess = child
+  let stderr = ""
+  child.stderr.on("data", chunk => {
+    stderr = (stderr + chunk).slice(-600)
+  })
+  child.on("exit", code => {
+    rcloneProcess = null
+    console.error(`[vitrail] rclone serve s'est arrêté (code ${code}) : ${stderr}`)
+    // On le relance dans 10 s : le Drive est la source de vérité de la
+    // bibliothèque, il doit toujours répondre.
+    setTimeout(startDriveServer, 10000)
+  })
+}
+
 const isCli = process.argv[2] === "--transcribe"
 
 if (!isCli) {
@@ -913,6 +1163,28 @@ if (!isCli) {
     console.log(`[vitrail] service local sur le port ${PORT}`)
     console.log(`[vitrail] 127.0.0.1:${PORT} · ${lanAddress() ?? "?"}:${PORT}`)
     console.log(`[vitrail] whisper.cpp ${hasWhisper() ? "disponible" : "ABSENT"}`)
+    startDriveServer()
+    // L'index est chargé depuis le disque (démarrage instantané) puis
+    // reconstruit en arrière-plan pour rester à jour. Cette construction
+    // relapse le Drive : le serveur rclone demarre ensuite sur un cache
+    // deja chaud, et repond tout de suite.
+    void library.loadFromDisk().then(() => {
+      void library.ensureIndex({ force: true }).then(() => startDriveServer())
+    })
+    // Les pochettes et les durées exactes se complètent en tâche de fond.
+    artwork.startBackgroundEnrichment(
+      () => library.getIndex().tracks,
+      updated => {
+        for (const item of updated) {
+          const track = library.getTrack(item.id)
+          if (!track) continue
+          if (item.artwork) track.artwork = item.artwork
+          if (item.durationSec) track.durationSec = item.durationSec
+          if (item.artist && !track.artist) track.artist = item.artist
+          if (item.album && !track.album) track.album = item.album
+        }
+      },
+    )
   })
 }
 

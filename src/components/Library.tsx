@@ -3,6 +3,7 @@ import { ChevronRight, Mic2, Pause, Play, Search } from "lucide-react"
 import { clsx } from "clsx"
 import { player, usePlayer } from "@/audio/player"
 import { Artwork } from "@/components/Artwork"
+import { CatalogSearch } from "@/components/CatalogSearch"
 import { DEMO_ATTRIBUTION, DEMO_TRACKS } from "@/lib/demoCatalog"
 import { LocalLibrary } from "@/components/LocalLibrary"
 import { ThemeToggle } from "@/components/ThemeToggle"
@@ -76,6 +77,8 @@ export function Library({ lyricsIds, onPlay }: LibraryProps) {
       {current ? <ResumeCard lyricsIds={lyricsIds} /> : null}
 
       <LocalLibrary onPlay={onPlay} />
+
+      <CatalogSearch onPlay={onPlay} />
 
       <section className="flex flex-col gap-3">
         <div className="flex items-baseline justify-between px-1">

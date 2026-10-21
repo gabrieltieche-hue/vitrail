@@ -21,7 +21,7 @@ stop() {
   fi
 
   # Instances orphelines. On s'appuie sur /proc/<pid>/exe pour savoir que
-  # c'est bien node, et on lit la ligne de commande telle quelle.
+  # c'est bien node (ou rclone), et on lit la ligne de commande telle quelle.
   # (Un `read -a` sur /proc/.../cmdline renvoie 1 en fin de fichier : c'est
   # pour ça qu'on ne l'utilise pas ici.)
   local pid exe cmd
@@ -29,10 +29,20 @@ stop() {
     [[ "$pid" == "$$" || "$pid" == "$PPID" ]] && continue
     [[ -r "/proc/$pid/cmdline" ]] || continue
     exe=$(readlink "/proc/$pid/exe" 2>/dev/null || echo "")
-    [[ "$(basename "${exe:-}")" == "node" ]] || continue
     cmd=$(tr "\0" " " < "/proc/$pid/cmdline" 2>/dev/null || echo "")
-    case "$cmd" in
-      *vitrail*server.js*|*vitrail*server.cjs*) kill "$pid" 2>/dev/null || true ;;
+    case "$(basename "${exe:-}")" in
+      node)
+        case "$cmd" in
+          *vitrail*server.js*|*vitrail*server.cjs*) kill "$pid" 2>/dev/null || true ;;
+        esac
+        ;;
+      rclone)
+        # Le serveur rclone (source du Drive) doit mourir avec le service,
+        # sinon le port 8091 reste occupé au redémarrage.
+        case "$cmd" in
+          *serve*8091*) kill "$pid" 2>/dev/null || true ;;
+        esac
+        ;;
     esac
   done
   sleep 1
