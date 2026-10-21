@@ -59,7 +59,9 @@ try:
     clicked = False
     for row in driver.find_elements(By.CSS_SELECTOR, "ul li"):
         buttons = row.find_elements(By.CSS_SELECTOR, "button")
-        if len(buttons) < 2:
+        # Un morceau deja disponible n'a qu'un bouton (ecouter) ; une
+        # proposition a en plus un bouton « Telecharger ».
+        if len(buttons) != 1:
             continue
         driver.execute_script("arguments[0].click();", buttons[0])
         clicked = True

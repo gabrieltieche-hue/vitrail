@@ -5,6 +5,7 @@ import { player, usePlayer } from "@/audio/player"
 import { Artwork } from "@/components/Artwork"
 import {
   listJobs,
+  lookupArtwork,
   requestDownload,
   resultToTrack,
   searchCatalog,
@@ -42,6 +43,23 @@ export function CatalogSearch({ onPlay }: SearchProps) {
       const found = await searchCatalog(clean)
       setResults(found)
       setSearching(false)
+      // Les pochettes manquantes sont complétées à la demande : l'app ne
+      // montre jamais de carré vide.
+      if (found.length > 0) {
+        const covers = await lookupArtwork(found)
+        if (Object.keys(covers).length === 0) return
+        setResults(current =>
+          current.map(result => {
+            const cover = covers[result.id]
+            if (!cover) return result
+            return {
+              ...result,
+              artwork: cover.artwork,
+              durationSec: result.durationSec || cover.durationSec,
+            }
+          }),
+        )
+      }
     }, 160)
     return () => {
       if (timer.current !== null) window.clearTimeout(timer.current)

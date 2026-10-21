@@ -958,9 +958,16 @@ async function streamLocalFile(req, res, file, contentType) {
 }
 
 /**
- * Relit un fichier du Google Drive en passant par le serveur HTTP de rclone
- * (qui gère les Range et son cache disque LRU). Rien n'est copié : le flux
- * traverse le service en direct.
+ * Relit un fichier du Google Drive.
+ *
+ * Deux chemins :
+ *  1. le serveur HTTP de rclone (rapide, et son cache disque évite de
+ *     réinterroger le Drive) ;
+ *  2. `rclone cat` en repli : le cache de répertoire de rclone peut être
+ *     périmé (le fichier a été téléversé récemment), et la lecture directe
+ *     n'en dépend pas.
+ *
+ * Dans les deux cas, le flux traverse le service sans être copié.
  */
 async function streamFromDrive(req, res, driveUrl, localFallback) {
   // Si le fichier existe en local (cache rclone ou lot en cours), on le sert
@@ -970,40 +977,76 @@ async function streamFromDrive(req, res, driveUrl, localFallback) {
     return
   }
 
-  // Le chemin du Drive contient des espaces et des accents : il doit être
-  // encodé pour l'URL, sinon rclone ne trouve pas le fichier.
   const encoded = String(driveUrl)
     .split("/")
     .map(segment => encodeURIComponent(segment))
     .join("/")
   const target = `${library.DRIVE_SERVE}${encoded}`
-  const upstream = await fetch(target, {
-    headers: req.headers.range ? { Range: req.headers.range } : {},
-  })
-  if (!upstream.ok && upstream.status !== 206) {
-    json(res, upstream.status === 404 ? 404 : 502, { error: "Flux Drive indisponible" })
-    return
+
+  try {
+    const upstream = await fetch(target, {
+      headers: req.headers.range ? { Range: req.headers.range } : {},
+    })
+    if (upstream.ok || upstream.status === 206) {
+      const headers = {
+        "Content-Type": upstream.headers.get("content-type") || "audio/mpeg",
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=3600",
+      }
+      const length = upstream.headers.get("content-length")
+      const contentRange = upstream.headers.get("content-range")
+      if (length) headers["Content-Length"] = length
+      if (contentRange) headers["Content-Range"] = contentRange
+      res.writeHead(upstream.status === 206 ? 206 : 200, headers)
+      const reader = upstream.body.getReader()
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        if (!res.write(Buffer.from(value))) {
+          await new Promise(resolve => res.once("drain", resolve))
+        }
+      }
+      res.end()
+      return
+    }
+  } catch {
+    /* on tente le repli */
   }
-  const headers = {
-    "Content-Type": upstream.headers.get("content-type") || "audio/mpeg",
+
+  await streamFromDriveWithCat(req, res, driveUrl)
+}
+
+/** Repli : lecture directe dans le Drive, par offset et longueur. */
+async function streamFromDriveWithCat(req, res, driveUrl) {
+  const remote = `${library.DRIVE_REMOTE}${driveUrl}`
+  const range = req.headers.range
+  let offset = 0
+  let count = null
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range)
+    if (match) {
+      offset = match[1] ? Number(match[1]) : 0
+      if (match[2]) count = Number(match[2]) - offset + 1
+    }
+  }
+
+  const args = ["cat"]
+  if (offset > 0) args.push("--offset", String(offset))
+  if (count !== null) args.push("--count", String(count))
+  args.push(remote)
+
+  const child = spawn("rclone", args, { stdio: ["ignore", "pipe", "ignore"] })
+
+  res.writeHead(range ? 206 : 200, {
+    "Content-Type": mimeFor(driveUrl),
     "Accept-Ranges": "bytes",
     "Access-Control-Allow-Origin": "*",
     "Cache-Control": "public, max-age=3600",
-  }
-  const length = upstream.headers.get("content-length")
-  const contentRange = upstream.headers.get("content-range")
-  if (length) headers["Content-Length"] = length
-  if (contentRange) headers["Content-Range"] = contentRange
-  res.writeHead(upstream.status === 206 ? 206 : 200, headers)
-  const reader = upstream.body.getReader()
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (!res.write(Buffer.from(value))) {
-      await new Promise(resolve => res.once("drain", resolve))
-    }
-  }
-  res.end()
+  })
+  child.stdout.pipe(res)
+  child.on("error", () => res.end())
+  child.on("close", () => res.end())
 }
 
 function readJsonBody(req) {
@@ -1149,10 +1192,11 @@ function spawnDrive() {
   })
   child.on("exit", code => {
     rcloneProcess = null
+    spawnedDrive = false
     console.error(`[vitrail] rclone serve s'est arrêté (code ${code}) : ${stderr}`)
-    // On le relance dans 10 s : le Drive est la source de vérité de la
-    // bibliothèque, il doit toujours répondre.
-    setTimeout(startDriveServer, 10000)
+    // On le relance : le Drive est la source de vérité de la bibliothèque,
+    // il doit toujours répondre.
+    setTimeout(startDriveServer, 8000)
   })
 }
 

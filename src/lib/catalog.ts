@@ -109,6 +109,33 @@ export async function listJobs(): Promise<DownloadJob[]> {
   }
 }
 
+export async function lookupArtwork(
+  results: CatalogResult[],
+): Promise<Record<string, { artwork: string; durationSec: number }>> {
+  const origin = await base()
+  if (!origin) return {}
+  const missing = results.filter(result => !result.artwork).slice(0, 12)
+  if (missing.length === 0) return {}
+
+  const found: Record<string, { artwork: string; durationSec: number }> = {}
+  await Promise.all(
+    missing.map(async result => {
+      try {
+        const params = new URLSearchParams({ title: result.title, artist: result.artist })
+        const response = await fetch(`${origin}/api/library/lookup?${params}`)
+        if (!response.ok) return
+        const data = (await response.json()) as { artwork?: string; durationSec?: number }
+        if (data.artwork) {
+          found[result.id] = { artwork: data.artwork, durationSec: data.durationSec ?? 0 }
+        }
+      } catch {
+        /* on continue */
+      }
+    }),
+  )
+  return found
+}
+
 /** Transforme un résultat du catalogue en morceau jouable. */
 export function resultToTrack(result: CatalogResult): Track | null {
   const origin = serviceBase()
