@@ -86,4 +86,34 @@ function isFresh(videoUrl) {
   return Boolean(cached && Date.now() - cached.at < TTL)
 }
 
-module.exports = { resolveAudioUrl, isFresh }
+/**
+ * Pré-résout en arrière-plan les URL d'une liste de vidéos.
+ *
+ * La première résolution prend une vingtaine de secondes (YouTube pose un
+ * défi anti-bot) : pré-résoudre pendant que l'utilisateur parcourt les
+ * résultats rend la lecture instantanée.
+ */
+const prefetching = new Set()
+
+async function prefetch(videoUrls, concurrency = 2) {
+  const queue = [...new Set(videoUrls.filter(Boolean))].filter(url => !cache[url])
+  if (queue.length === 0) return
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    for (;;) {
+      const url = queue.shift()
+      if (!url) return
+      if (prefetching.has(url)) continue
+      prefetching.add(url)
+      try {
+        await resolveAudioUrl(url)
+      } catch {
+        /* on ignore */
+      } finally {
+        prefetching.delete(url)
+      }
+    }
+  })
+  await Promise.all(workers)
+}
+
+module.exports = { resolveAudioUrl, isFresh, prefetch }

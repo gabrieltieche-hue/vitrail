@@ -558,7 +558,13 @@ const server = http.createServer(async (req, res) => {
       await library.ensureIndex()
       const query = url.searchParams.get("q") || ""
       const limit = Math.min(200, Number(url.searchParams.get("limit")) || 60)
-      json(res, 200, { query, results: library.search(query, limit) })
+      const results = library.search(query, limit)
+      json(res, 200, { query, results })
+      // On pré-résout les URL des premiers résultats : la lecture sera
+      // instantanée au moment de cliquer.
+      void streamUrl.prefetch(
+        results.filter(result => result.url).slice(0, 8).map(result => result.url),
+      )
       return
     }
 
