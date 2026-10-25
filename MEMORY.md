@@ -27,7 +27,7 @@ ses morceaux). L'app devient un lecteur local avec un service de famille.
 
 - **Service local obligatoire.** Le navigateur seul ne peut ni transcrire, ni
   partager une file entre appareils. Le service tourne sur la machine de la
-  tablette, port 8099, joignable en `127.0.0.1` et en `192.168.1.114`.
+  tablette, port 8099, joignable en `127.0.0.1` et sur l'IP du réseau local.
 - **Clé de partage = SHA-256 du fichier.** Le navigateur calcule
   l'empreinte, le service indexe la transcription par empreinte. Les paroles
   transcrites sont donc partagées entre les appareils sans recalcul.

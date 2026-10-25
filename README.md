@@ -29,7 +29,7 @@ machine qui héberge la tablette.
 
 ```
 Navigateur  ──▶  http://127.0.0.1:8099   (tablette)
-                     ou http://192.168.1.114:8099  (autres appareils du réseau)
+                     ou http://<ip-locale>:8099  (autres appareils du réseau)
                           │
                           ├── l'application (dist/)
                           └── l'API : transcription, bibliothèque, file, stats

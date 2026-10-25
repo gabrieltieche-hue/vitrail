@@ -22,8 +22,8 @@ bash server/service.sh stop      # arrête
 bash server/service.sh restart
 ```
 
-Écoute sur `0.0.0.0:8099` : accessible en `127.0.0.1` depuis la tablette et en
-`192.168.1.114` depuis les autres appareils du réseau local.
+Écoute sur `0.0.0.0:8099` : accessible en `127.0.0.1` depuis la tablette et via
+l'IP du réseau local depuis les autres appareils.
 
 ## Dépendances
 
