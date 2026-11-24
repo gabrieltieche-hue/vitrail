@@ -1,7 +1,3 @@
-/**
- * Fichier généré : morceaux du catalogue de démo dont LRCLIB possède les paroles.
- * Régénérer avec scripts/build-lyrics-index.py.
- */
 export const LYRICS_IDS: ReadonlySet<string> = new Set([
   "jw-001",
   "jw-002",

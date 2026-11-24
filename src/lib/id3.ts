@@ -1,10 +1,3 @@
-/**
- * Lecture des métadonnées audio dans le navigateur, sans dépendance.
- *
- * - MP3 : balises ID3v2.2 / v2.3 / v2.4, avec repli ID3v1 en fin de fichier.
- * - FLAC, M4A, OGG, WAV : repli sur le nom de fichier (« Artiste - Titre »).
- */
-
 export type AudioTags = {
   title: string | null
   artist: string | null
@@ -12,7 +5,6 @@ export type AudioTags = {
   year: number | null
   trackNumber: number | null
   artwork: { blob: Blob; mime: string } | null
-  /** Paroles non synchronisées intégrées au fichier (trame ID3 USLT). */
   lyrics: string | null
 }
 
@@ -32,7 +24,6 @@ function decodeText(bytes: Uint8Array, encoding: number): string {
       case 0:
         return new TextDecoder("iso-8859-1").decode(bytes).replace(/\0+$/, "").trim()
       case 1: {
-        // UTF-16 avec BOM
         const little = bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe
         const big = bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff
         if (little || big) {
@@ -75,7 +66,6 @@ function parseTrackNumber(value: string | null): number | null {
   return match ? Number.parseInt(match[1] ?? "", 10) : null
 }
 
-/** Découpe une chaîne ID3 textuelle multivalue (séparateur NUL en v2.4). */
 function firstValue(value: string | null): string | null {
   if (!value) return null
   const parts = value.split("\0").map(part => part.trim()).filter(Boolean)
@@ -163,8 +153,7 @@ export function parseId3(buffer: ArrayBuffer): AudioTags {
           }
           cursor = terminator + 1
         }
-        cursor += 1 // type de picture
-        // description, terminée par NUL (pour l'encodage 0/3) ou double NUL (UTF-16)
+        cursor += 1
         if (encoding === 1 || encoding === 2) {
           while (cursor + 1 < data.length && !(data[cursor] === 0 && data[cursor + 1] === 0)) cursor += 2
           cursor += 2
@@ -183,7 +172,6 @@ export function parseId3(buffer: ArrayBuffer): AudioTags {
       case "USLT":
       case "ULT": {
         if (tags.lyrics) break
-        // langue (3 octets) + description terminée par NUL + texte
         const encoding = data[0] ?? 0
         let cursor = 4
         if (encoding === 1 || encoding === 2) {
@@ -236,7 +224,6 @@ function parseId3v1(bytes: Uint8Array): Partial<AudioTags> {
   return result
 }
 
-/** Repli : « Artiste - Titre.ext » ou « Titre.ext ». */
 export function tagsFromFilename(filename: string): Partial<AudioTags> {
   const base = filename.replace(/\.[a-z0-9]{2,4}$/i, "").replace(/_/g, " ").trim()
   const dash = base.match(/^(.+?)\s+[-–—]\s+(.+)$/)

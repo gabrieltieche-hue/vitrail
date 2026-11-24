@@ -1,16 +1,8 @@
-/**
- * Historique d'écoute local : la base des capsules.
- *
- * Tout reste dans le navigateur (localStorage). Le service familial peut
- * ensuite recevoir un résumé pour une vue partagée.
- */
-
 import { player, usePlayer } from "@/audio/player"
 import { useEffect, useRef } from "react"
 
 const STORAGE_KEY = "vitrail_history_v1"
 const MAX_EVENTS = 3000
-/** Pas d'enregistrement : on empile des événements de 30 s. */
 const STEP_SECONDS = 15
 
 export type PlayEvent = {
@@ -61,8 +53,6 @@ export function getHistory(): History {
 export function clearHistory(): void {
   write({ events: [] })
 }
-
-// -- agrégats ---------------------------------------------------------------
 
 export type Summary = {
   totalSeconds: number
@@ -130,11 +120,6 @@ export function summarise(history: History): Summary {
   }
 }
 
-/**
- * Enregistre ce qui est réellement écouté : on accumule le temps de lecture
- * entre deux changements de morceau, et on ignore les écoutes de moins de
- * 10 secondes (une simple reconnaissance ne compte pas).
- */
 export function useHistoryRecorder(): void {
   const state = usePlayer()
   const lastRef = useRef<{
@@ -179,7 +164,6 @@ export function useHistoryRecorder(): void {
       return
     }
 
-    // Une pause met en danger l'historique : on enregistre ce qui a été écouté.
     if (track && !state.playing) {
       const pending = previous.seconds - previous.recorded
       if (pending >= 10) {
@@ -191,7 +175,6 @@ export function useHistoryRecorder(): void {
 
     if (track && state.playing) {
       const delta = state.time - previous.position
-      // Un saut en avant de plus de 5 s est une recherche, pas de l'écoute.
       if (delta > 0 && delta < 5) {
         const seconds = previous.seconds + delta
         const pending = seconds - previous.recorded
@@ -208,7 +191,6 @@ export function useHistoryRecorder(): void {
   }, [state.index, state.playing, state.time, state.queue])
 }
 
-/** Ferme la session en cours (changement d'onglet, fermeture). */
 export function flushHistory(): void {
   const state = player.getSnapshot()
   const track = state.queue[state.index]

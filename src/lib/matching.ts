@@ -1,12 +1,3 @@
-/**
- * Appariement des métadonnées d'un fichier importé avec une base de paroles.
- *
- * Les fichiers du monde réel ont des balises douteuses :
- *   titre  = "GIMS & La Mano 1.9 - PARISIENNE (Clip officiel)"
- *   artiste = "GIMS"
- * Il faut donc normaliser, generates des variantes, puis comparer par score.
- */
-
 const NOISE_PARENTHESES = [
   "clip officiel",
   "official video",
@@ -52,7 +43,6 @@ export function normalize(value: string): string {
     .trim()
 }
 
-/** Retire le contenu des parenthèses « parasites » (clip officiel, audio…). */
 export function dropNoiseParentheticals(value: string): string {
   return value.replace(/\(([^)]*)\)/g, (match, inner: string) => {
     const cleaned = normalize(inner)
@@ -61,7 +51,6 @@ export function dropNoiseParentheticals(value: string): string {
   })
 }
 
-/** Coupe après un marqueur de feat. (feat., ft., avec…). */
 export function dropFeat(value: string): string {
   const lowered = stripAccents(value).toLowerCase()
   let cut = value.length
@@ -72,7 +61,6 @@ export function dropFeat(value: string): string {
   return value.slice(0, cut).trim()
 }
 
-/** "GIMS & La Mano 1.9" → "gims & la mano" (on retire les numéros de version). */
 export function stripVersionNumbers(value: string): string {
   return value
     .split(" ")
@@ -88,7 +76,6 @@ function tokenize(value: string): string[] {
     .filter(token => token.length > 0 && !/^\d+$/.test(token))
 }
 
-/** similarité de Dice sur les jetons, avec bonus d'inclusion. */
 export function similarity(a: string, b: string): number {
   const tokensA = new Set(tokenize(a))
   const tokensB = new Set(tokenize(b))
@@ -113,13 +100,6 @@ export type MetadataVariant = {
   artist: string
 }
 
-/**
- * Variantes plausibles du titre et de l'artiste, de la plus fiable à la moins fiable.
- *
- * « GIMS & La Mano 1.9 - PARISIENNE (Clip officiel) » + artiste « GIMS »
- *   → titres   : "PARISIENNE", "GIMS & La Mano 1.9 - PARISIENNE", …
- *   → artistes : "GIMS & La Mano", "GIMS", …
- */
 export function metadataVariants(track: { title: string; artist: string }): MetadataVariant[] {
   const rawTitle = track.title.trim()
   const rawArtist = track.artist.trim()
@@ -130,7 +110,6 @@ export function metadataVariants(track: { title: string; artist: string }): Meta
     if (cleaned && !titles.includes(cleaned)) titles.push(cleaned)
   }
 
-  // Sources brutes : la partie après le dernier « - » est souvent le vrai titre.
   const sources: string[] = []
   const dashIndex = rawTitle.lastIndexOf(" - ")
   if (dashIndex > 0) sources.push(rawTitle.slice(dashIndex + 3))
@@ -152,7 +131,6 @@ export function metadataVariants(track: { title: string; artist: string }): Meta
   pushArtist(dropFeat(dropNoiseParentheticals(rawArtist)))
   pushArtist(rawArtist)
 
-  // Le titre peut contenir l'artiste : on tente de l'extraire.
   for (const title of [...titles]) {
     const lower = title.toLowerCase()
     const artistLower = rawArtist.toLowerCase()
@@ -177,9 +155,6 @@ export function metadataVariants(track: { title: string; artist: string }): Meta
   return variants
 }
 
-/** Score global d'une correspondance LRCLIB. On compare le candidat à la
- *  meilleure des variantes du titre et de l'artiste : c'est ce qui permet de
- *  reconnaître « PARISIENNE » dans un titre balisé « GIMS & La Mano - PARISIENNE (Clip officiel) ». */
 export function scoreMatch(
   candidate: { title: string; artist: string; duration: number },
   target: {

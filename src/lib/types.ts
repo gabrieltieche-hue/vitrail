@@ -9,9 +9,7 @@ export type Track = {
   audio: string
   sourceUrl?: string
   license?: string
-  /** Paroles intégrées au fichier (import personnel). */
   embeddedLyrics?: string
-  /** Empreinte SHA-256 du fichier : clé de partage des paroles transcrites. */
   fileHash?: string
 }
 

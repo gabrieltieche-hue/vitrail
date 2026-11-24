@@ -1,12 +1,3 @@
-/**
- * Téléchargements à la demande.
- *
- * On ne réécrit pas de téléchargeur : on délègue au script notube-batch déjà
- * présent sur la machine, avec un dossier de sortie et un dossier Drive
- * dédiés pour ne pas entrer en conflit avec les lots en cours. Si le job
- * échoue, on réessaie avec yt-dlp en direct.
- */
-
 const fs = require("node:fs")
 const fsp = require("node:fs/promises")
 const path = require("node:path")
@@ -22,7 +13,6 @@ const MAX_CONCURRENT = Number(process.env.VITRAIL_JOBS || 2)
 
 fs.mkdirSync(DOWNLOAD_DIR, { recursive: true })
 
-/** file: url, title: "Artiste - Titre", startedAt, status, log, error */
 let jobs = []
 try {
   jobs = JSON.parse(fs.readFileSync(JOBS_FILE, "utf8"))
@@ -58,7 +48,6 @@ function runProcess(command, args, onLine) {
   })
 }
 
-/** Nom de fichier final, dérivé de l'identifiant vidéo. */
 function targetName(id, title) {
   const videoId = id.replace(/^yt-/, "")
   return `${sanitize(title) || videoId} [${videoId}]`

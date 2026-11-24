@@ -24,11 +24,9 @@ driver.set_window_size(1280, 800)
 
 results = []
 
-
 def check(name, ok, detail=""):
     results.append((name, bool(ok), detail))
     print(f"  [{'OK ' if ok else 'KO '}] {name} {detail}", flush=True)
-
 
 def click_text(text):
     for element in driver.find_elements(By.CSS_SELECTOR, "button"):
@@ -36,7 +34,6 @@ def click_text(text):
             driver.execute_script("arguments[0].click();", element)
             return True
     return False
-
 
 def open_capsules():
     driver.execute_script(
@@ -47,21 +44,19 @@ def open_capsules():
     )
     time.sleep(3)
 
-
 try:
     driver.get(BASE)
     time.sleep(4)
 
-    # --- Enregistrement réel d'une écoute -------------------------------
     inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
     inputs[0].send_keys(SAMPLE)
     time.sleep(8)
     click_text("Mirage")
     time.sleep(5)
-    # On avance dans le morceau pour dépasser le seuil de 10 s.
+
     driver.execute_script("window.__vitrailAudio.currentTime = 45")
     time.sleep(17)
-    # Pause : l'écoute doit être Recorded immédiatement.
+
     driver.execute_script("window.__vitrailAudio.pause()")
     time.sleep(2)
 
@@ -70,7 +65,6 @@ try:
     )
     check("écoute enregistrée", len(history.get("events", [])) > 0, str(history.get("events", [])[:1]))
 
-    # --- Rendu des capsules avec un historique garni ---------------------
     driver.execute_script(
         """
         const now = Date.now();
@@ -101,7 +95,6 @@ try:
     check("artistes listés", "GIMS" in body or "gabriel_tieche" in body)
     check("graphe sur 7 jours", body.count("\n") > 5)
 
-    # --- File famille ----------------------------------------------------
     driver.execute_script(
         """
         const b=[...document.querySelectorAll('button')].find(x=>(x.textContent||'').trim()==='File');

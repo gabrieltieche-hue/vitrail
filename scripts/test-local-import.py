@@ -16,8 +16,7 @@ OUT = Path("/tmp/opencode")
 options = Options()
 options.add_argument("-headless")
 options.binary_location = "/tmp/opencode/firefox/firefox"
-# Un clic scripté n'est pas un « geste utilisateur » : Firefox bloquerait
-# l'autoplay. On l'autorise pour le test.
+
 options.set_preference("media.autoplay.default", 0)
 options.set_preference("media.block-autoplay-until-in-foreground", False)
 service = Service(executable_path="/tmp/opencode/geckodriver")
@@ -36,7 +35,6 @@ try:
     driver.save_screenshot(str(OUT / "vitrail-local-1-import.png"))
     print("  -> capture import", flush=True)
 
-    # Lancer le morceau importé
     clicked = False
     for element in driver.find_elements(By.CSS_SELECTOR, "button"):
         text = element.text or ""
@@ -62,7 +60,6 @@ try:
     )
     print("  audio:", audio, flush=True)
 
-    # L'état de l'interface : erreurs visibles ?
     body = driver.execute_script("return document.body.innerText")
     print("  mentions d'erreur:", [w for w in ("indisponible", "impossible", "erreur") if w in body.lower()], flush=True)
 finally:

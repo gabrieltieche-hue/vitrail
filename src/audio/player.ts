@@ -56,7 +56,6 @@ class PlayerEngine {
     }
   }
 
-  // --- abonnement React -------------------------------------------------
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
@@ -102,7 +101,6 @@ class PlayerEngine {
     }
   }
 
-  // --- élément audio ----------------------------------------------------
   private element(): HTMLAudioElement {
     if (this.audio) return this.audio
     const audio = new Audio()
@@ -174,9 +172,6 @@ class PlayerEngine {
     const audio = this.element()
     const code = audio.error?.code
 
-    // Firefox laisse parfois un MEDIA_ERR_DECODE fantôme alors que la lecture
-    // continue (readyState >= 2). On ne l'affiche que si le média est
-    // réellement inutilisable.
     if (audio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
       this.emit({ loading: false })
       return
@@ -184,8 +179,6 @@ class PlayerEngine {
 
     const track = this.current()
 
-    // L'URL signée du CDN expire (quelques heures). On demande au service
-    // une URL fraîche et on réessaie, sans jamais dire « Lecture impossible ».
     if (track && /\/api\/stream\//.test(track.audio) && this.retryCount < 3) {
       this.retryCount += 1
       this.emit({ loading: true, error: null })
@@ -199,8 +192,6 @@ class PlayerEngine {
       return
     }
 
-    // archive.org répond parfois 500 sur un flux : on relance avec une URL
-    // légèrement différente pour passer d'un edge en cache défectueux.
     if (track && this.retryCount < 3 && !track.audio.startsWith("blob:") && !/\/api\/stream\//.test(track.audio)) {
       this.retryCount += 1
       this.emit({ loading: true, error: null })
@@ -232,7 +223,6 @@ class PlayerEngine {
     this.next(true)
   }
 
-  // --- API publique -----------------------------------------------------
   playQueue(tracks: Track[], startIndex = 0, contextLabel?: string): void {
     if (tracks.length === 0) return
     const safeIndex = Math.min(Math.max(startIndex, 0), tracks.length - 1)
@@ -411,11 +401,6 @@ class PlayerEngine {
     this.persist()
   }
 
-  /**
-   * Les URL `blob:` des fichiers importés ne survivent pas à un rechargement.
-   * À chaque relecture de la bibliothèque locale, on réinjecte les URL
-   * fraîches dans la file pour ne pas laisser de sources mortes.
-   */
   syncLocalTracks(tracks: Track[]): void {
     if (tracks.length === 0) return
     const byId = new Map(tracks.map(track => [track.id, track]))

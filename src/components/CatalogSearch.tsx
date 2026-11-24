@@ -29,7 +29,6 @@ export function CatalogSearch({ onPlay }: SearchProps) {
   const [jobs, setJobs] = useState<DownloadJob[]>([])
   const timer = useRef<number | null>(null)
 
-  // Recherche locale, avec un léger délai pour ne pas taper à chaque lettre.
   useEffect(() => {
     if (timer.current !== null) window.clearTimeout(timer.current)
     const clean = query.trim()
@@ -43,8 +42,6 @@ export function CatalogSearch({ onPlay }: SearchProps) {
       const found = await searchCatalog(clean)
       setResults(found)
       setSearching(false)
-      // Les pochettes manquantes sont complétées à la demande : l'app ne
-      // montre jamais de carré vide.
       if (found.length > 0) {
         const covers = await lookupArtwork(found)
         if (Object.keys(covers).length === 0) return
@@ -66,7 +63,6 @@ export function CatalogSearch({ onPlay }: SearchProps) {
     }
   }, [query])
 
-  // Suivi des téléchargements en cours.
   useEffect(() => {
     let cancelled = false
     const tick = async () => {

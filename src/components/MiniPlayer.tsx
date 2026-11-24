@@ -4,10 +4,6 @@ import { player, usePlayer } from "@/audio/player"
 import { Artwork } from "@/components/Artwork"
 import { ProgressBar } from "@/components/ProgressBar"
 
-/**
- * Lecteur compact. Il vit dans le « dock » du bas (avec la navigation),
- * et non en position fixe : c'était la cause du chevauchement.
- */
 export function MiniPlayer({ onOpen }: { onOpen: () => void }) {
   const state = usePlayer()
   const track = state.queue[state.index] ?? null

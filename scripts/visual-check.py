@@ -19,7 +19,6 @@ VIEWPORTS = {
     "phone": (430, 900),
 }
 
-
 def build(width: int, height: int) -> webdriver.Firefox:
     options = Options()
     options.add_argument("-headless")
@@ -31,13 +30,11 @@ def build(width: int, height: int) -> webdriver.Firefox:
     driver.set_window_size(width, height)
     return driver
 
-
 def shoot(driver: webdriver.Firefox, name: str) -> Path:
     path = OUT / f"vitrail-{name}.png"
     driver.save_screenshot(str(path))
     print(f"  -> {path}", flush=True)
     return path
-
 
 def click_by_text(driver: webdriver.Firefox, text: str) -> bool:
     for element in driver.find_elements(By.CSS_SELECTOR, "button, li button, a"):
@@ -49,13 +46,11 @@ def click_by_text(driver: webdriver.Firefox, text: str) -> bool:
             continue
     return False
 
-
 def click_aria(driver: webdriver.Firefox, label: str) -> bool:
     for element in driver.find_elements(By.CSS_SELECTOR, f'button[aria-label="{label}"]'):
         driver.execute_script("arguments[0].click();", element)
         return True
     return False
-
 
 def main() -> int:
     label = sys.argv[1] if len(sys.argv) > 1 else "tablette"
@@ -67,13 +62,11 @@ def main() -> int:
         time.sleep(4)
         shoot(driver, f"{label}-1-bibliotheque")
 
-        # Jouer un morceau qui a des paroles (Let It In)
         ok = click_by_text(driver, "Let It In")
         print("  morceau cliqué:", ok, flush=True)
         time.sleep(6)
         shoot(driver, f"{label}-2-lecteur")
 
-        # Mode paroles (visible seulement en portrait)
         switched = click_aria(driver, "Paroles")
         print("  mode paroles:", switched, flush=True)
         time.sleep(5)
@@ -82,13 +75,11 @@ def main() -> int:
         time.sleep(3)
         shoot(driver, f"{label}-4-paroles-chargees")
 
-        # File d'attente
         opened = click_aria(driver, "File d'attente")
         print("  file ouverte:", opened, flush=True)
         time.sleep(3)
         shoot(driver, f"{label}-5-file")
 
-        # Vérification que le son joue réellement
         audio_state = driver.execute_script(
             """
             const a = document.querySelector('audio') || (window.__vitrailAudio);
@@ -108,7 +99,6 @@ def main() -> int:
     finally:
         driver.quit()
     return 0
-
 
 if __name__ == "__main__":
     raise SystemExit(main())

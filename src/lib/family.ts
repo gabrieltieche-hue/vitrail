@@ -1,13 +1,3 @@
-/**
- * Client du service local de la famille.
- *
- * Le service tourne sur la machine qui héberge Vitrail (la tablette). Il
- * fournit : la bibliothèque partagée, la transcription des paroles, la file
- * d'attente commune et les statistiques d'écoute.
- *
- * Aucune donnée ne part sur internet : tout reste sur le réseau local.
- */
-
 export type FamilyTrack = {
   id: string
   title: string
@@ -42,7 +32,6 @@ export type Transcript = {
 
 export type QueueItem = {
   id: string
-  /** "demo" = catalogue libre, "family" = fichier partagé par le service local. */
   kind: "demo" | "family"
   title: string
   artist: string
@@ -74,10 +63,6 @@ let resolving: Promise<string | null> | null = null
 function candidates(): string[] {
   const list: string[] = []
   if (typeof location !== "undefined") {
-    // Priorité à l'origine courante : quand l'app est servie par le service
-    // local (http://127.0.0.1:8099), l'API est en même origine et tout
-    // fonctionne. Depuis une page HTTPS (Vercel), l'accès à une API HTTP
-    // locale est bloqué par le navigateur (mixed content) : on le dit.
     list.push(location.origin)
     if (location.port !== "8099") {
       list.push(`${location.protocol}//${location.hostname}:8099`)
@@ -88,8 +73,6 @@ function candidates(): string[] {
   return [...new Set(list)]
 }
 
-/** Vrai quand la page est en HTTPS : le navigateur bloque alors l'appel à
- *  une API HTTP locale (mixed content). */
 export function isMixedContentBlocked(): boolean {
   if (typeof location === "undefined") return false
   if (location.protocol !== "https:") return false
@@ -109,7 +92,6 @@ async function probe(url: string, timeoutMs = 4000): Promise<boolean> {
   }
 }
 
-/** Trouve le service local (une seule fois, puis mémorisé). */
 export async function findService(): Promise<string | null> {
   if (resolvedBase) return resolvedBase
   if (resolving) return resolving
@@ -169,8 +151,6 @@ export async function serviceHealth(): Promise<{
   return request("/api/health")
 }
 
-// -- transcription ---------------------------------------------------------
-
 export async function getTranscript(hash: string): Promise<Transcript | null> {
   const result = await request<Transcript & { status?: string }>(`/api/transcript/${hash}`)
   if (!result || result.status === "pending") return null
@@ -198,8 +178,6 @@ export async function requestTranscript(
     return false
   }
 }
-
-// -- bibliothèque partagée -------------------------------------------------
 
 export async function listFamilyLibrary(): Promise<FamilyTrack[]> {
   const result = await request<{ items: FamilyTrack[] }>("/api/library")
@@ -234,7 +212,6 @@ export function familyArtworkUrl(id: string): string | null {
   return resolvedBase ? `${resolvedBase}/api/library/${id}/artwork` : null
 }
 
-/** Transforme un élément de la file partagée en morceau jouable. */
 export function queueItemToTrack(item: QueueItem): import("@/lib/types").Track | null {
   if (item.kind !== "family") return null
   const base = resolvedBase
@@ -251,8 +228,6 @@ export function queueItemToTrack(item: QueueItem): import("@/lib/types").Track |
     license: "Bibliothèque de la famille",
   }
 }
-
-// -- file d'attente partagée ------------------------------------------------
 
 export async function getFamilyQueue(): Promise<FamilyQueue | null> {
   return request<FamilyQueue>("/api/queue")
@@ -287,8 +262,6 @@ export async function setFamilyNowPlaying(item: QueueItem | null): Promise<Famil
     headers: { "x-metadata": encodeMeta(item ?? {}) },
   })
 }
-
-// -- statistiques ------------------------------------------------------------
 
 export async function getFamilyStats(): Promise<FamilyStats | null> {
   return request<FamilyStats>("/api/stats")

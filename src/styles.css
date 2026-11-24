@@ -2,15 +2,12 @@
 @import "@fontsource-variable/inter";
 @import "@fontsource-variable/outfit";
 
-/* Variante « clair » : on l'active quand <html> porte la classe .light. */
 @custom-variant light (&:where(html.light, html.light *));
 
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Outfit Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 
-  /* Palette sémantique : pilotée par les variables d'exécution ci-dessous,
-     ce qui permet de basculer clair / sombre sans dupliquer les classes. */
   --color-canvas: var(--canvas);
   --color-ink: var(--ink);
   --color-surface: var(--surface);
@@ -117,8 +114,6 @@
     transform: scale(0.97);
   }
 
-  /* Panneaux du dock bas : posés sur du contenu, le verre dépoli de Firefox
-     laisse transparaître les pochettes. Fond dense, même lumière en bord. */
   .dock-panel {
     background: var(--dock-bg);
     border: 1px solid var(--line);

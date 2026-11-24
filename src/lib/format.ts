@@ -1,4 +1,3 @@
-/** "3:07" — format court pour les durées de morceaux. */
 export function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00"
   const total = Math.floor(seconds)
@@ -7,7 +6,6 @@ export function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`
 }
 
-/** "1 h 04" — format long pour les capsules d'écoute. */
 export function formatLongDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "0 min"
   const total = Math.round(seconds)

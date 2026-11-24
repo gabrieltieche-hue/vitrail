@@ -54,7 +54,6 @@ export function useLocalLibrary() {
         }
         return recordToTrack(record, audioUrl, artworkUrl)
       })
-      // Les URL blob: de la file doivent être rafraîchies après un rechargement.
       player.syncLocalTracks(tracks)
       const estimate = await storageEstimate()
       setState({

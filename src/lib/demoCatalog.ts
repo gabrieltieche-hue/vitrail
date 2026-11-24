@@ -1,10 +1,5 @@
 import type { Track } from "@/lib/types"
 
-/**
- * Catalogue de démonstration — morceaux libres, jouables sans abonnement.
- * Artiste : Josh Woodward · Licence : CC BY 4.0 · Source : archive.org
- * https://www.joshwoodward.com/
- */
 const ARTIST = "Josh Woodward"
 const LICENSE = "CC BY 4.0"
 

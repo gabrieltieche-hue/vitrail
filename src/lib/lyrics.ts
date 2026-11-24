@@ -9,7 +9,6 @@ const CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 30
 type CachedEntry = {
   fetchedAt: number
   lrclibId: number
-  /** LRC brut, conservé tel quel pour préserver la synchronisation mot à mot. */
   synced: string | null
   plain: string | null
   matchedTitle?: string
@@ -100,10 +99,6 @@ async function searchLrclib(title: string, artist: string): Promise<LrclibRecord
   return Array.isArray(records) ? records : []
 }
 
-/**
- * Cherche les paroles d'un morceau : plusieurs variantes de titre et d'artiste
- * sont essayées, puis chaque résultat est noté (titre, artiste, durée).
- */
 export async function findLyrics(track: Track): Promise<LyricsResult | null> {
   const variants = metadataVariants({ title: track.title, artist: track.artist })
   const seen = new Set<number>()
@@ -135,11 +130,8 @@ export async function findLyrics(track: Track): Promise<LyricsResult | null> {
         durationSec: track.durationSec,
       },
     )
-    // Le titre prime : une durée qui colle avec un autre titre ne doit pas passer.
     if (scored.titleSim < 0.62) continue
     if (track.durationSec && track.durationSec > 0 && scored.durationDelta > 12) continue
-    // Le risque de prendre la chanson d'un homonyme est réel : si l'artiste
-    // est connu, il doit correspondre.
     const artistKnown = track.artist.trim().length > 3 && !/^(artiste inconnu|unknown)$/i.test(track.artist)
     if (artistKnown && scored.artistSim < 0.45) continue
     if (!best || scored.score > best.score) {

@@ -24,11 +24,9 @@ driver.set_window_size(1280, 800)
 
 results = []
 
-
 def check(name, ok, detail=""):
     results.append((name, bool(ok), detail))
     print(f"  [{'OK ' if ok else 'KO '}] {name} {detail}", flush=True)
-
 
 def click_text(text, exact=False):
     for element in driver.find_elements(By.CSS_SELECTOR, "button"):
@@ -38,19 +36,16 @@ def click_text(text, exact=False):
             return True
     return False
 
-
 def click_aria(label):
     for element in driver.find_elements(By.CSS_SELECTOR, f'button[aria-label="{label}"]'):
         driver.execute_script("arguments[0].click();", element)
         return True
     return False
 
-
 try:
     driver.get(BASE)
     time.sleep(4)
 
-    # --- 1. Import ------------------------------------------------------
     inputs = driver.find_elements(By.CSS_SELECTOR, 'input[type="file"]')
     check("champ d'import présent", len(inputs) > 0)
     inputs[0].send_keys(SAMPLE)
@@ -58,7 +53,6 @@ try:
     body = driver.execute_script("return document.body.innerText")
     check("morceau importé visible", "Mirage" in body)
 
-    # --- 2. LECTURE + PAROLES ------------------------------------------
     click_text("Mirage")
     time.sleep(7)
     driver.save_screenshot(str(OUT / "acc-1-lecteur.png"))
@@ -75,7 +69,6 @@ try:
     lyrics_visible = "Encore une fois" in body or "Ouais" in body or "Je sais" in body
     check("paroles affichées", lyrics_visible)
 
-    # --- 3. UI : pas de chevauchement mini-lecteur / nav ----------------
     click_aria("Réduire")
     geometry = None
     for _ in range(20):
@@ -95,7 +88,6 @@ try:
     check("pas de chevauchement mini-lecteur/nav", geometry and not geometry["overlap"], str(geometry))
     driver.save_screenshot(str(OUT / "acc-4-dock.png"))
 
-    # --- 4. CAPSULES ----------------------------------------------------
     driver.execute_script(
         """
         const b=[...document.querySelectorAll('button')].find(x=>(x.textContent||'').trim()==='Capsules');
@@ -107,7 +99,6 @@ try:
     body = driver.execute_script("return document.body.innerText")
     check("capsules affichées", "d" in body and ("écoute" in body.lower() or "Écouté" in body))
 
-    # --- 5. FILE FAMILLE ------------------------------------------------
     driver.execute_script(
         """
         const b=[...document.querySelectorAll('button')].find(x=>(x.textContent||'').trim()==='File');

@@ -1,8 +1,3 @@
-/**
- * Client du catalogue : recherche locale (instantanée) et recherche YouTube
- * (à la demande, ~10 s) passent par le service local.
- */
-
 import { serviceBase } from "@/lib/family"
 import type { Track } from "@/lib/types"
 
@@ -136,7 +131,6 @@ export async function lookupArtwork(
   return found
 }
 
-/** Transforme un résultat du catalogue en morceau jouable. */
 export function resultToTrack(result: CatalogResult): Track | null {
   const origin = serviceBase()
   if (!origin) return null

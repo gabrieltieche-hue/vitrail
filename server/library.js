@@ -1,18 +1,3 @@
-/**
- * Index de la musique : une seule source de vérité, en mémoire.
- *
- * Ce module rassemble tout ce que la machine sait écouter :
- *   - le catalogue notube-batch (urls_*.csv) : artiste, titre, URL, rang ;
- *   - l'état des téléchargements (dl_france|dl_international/state.json) : ce qui est déjà là ;
- *   - les fichiers présents sur le disque (dossiers des lots, downloads/) ;
- *   - le contenu du Google Drive (gdrive:Notube) ;
- *   - le catalogue libre de démonstration.
- *
- * Aucune donnée audio n'est chargée : l'index ne contient que des
- * métadonnées (quelques mégaoctets). Le flux est ensuite relayé à la
- * demande, avec les requêtes Range.
- */
-
 const fs = require("node:fs")
 const fsp = require("node:fs/promises")
 const path = require("node:path")
@@ -25,13 +10,10 @@ const RCLONE = "rclone"
 const DRIVE_REMOTE = process.env.VITRAIL_DRIVE_REMOTE || "gdrive:Notube"
 const DRIVE_SERVE = process.env.VITRAIL_DRIVE_SERVE || "http://127.0.0.1:8091"
 
-/** Un morceau de l'index. */
 const EMPTY_INDEX = { tracks: [], builtAt: 0, sources: {} }
 
 let index = { ...EMPTY_INDEX, tracks: [] }
 let building = null
-
-// ------------------------------------------------------------------ utilitaires
 
 function normalize(value) {
   return String(value || "")
@@ -57,7 +39,6 @@ function stripDecorations(value) {
     .trim()
 }
 
-/** Distance de Levenshtein bornée (early exit). */
 function levenshtein(a, b) {
   if (a === b) return 0
   if (!a.length) return b.length
@@ -83,8 +64,6 @@ function run(command, args, timeoutMs = 120000) {
     })
   })
 }
-
-// ------------------------------------------------------------------ lecture CSV
 
 async function readCatalogCsv(file) {
   const content = await fsp.readFile(file, "utf8").catch(() => "")
@@ -114,32 +93,11 @@ async function readCatalogCsv(file) {
   return rows
 }
 
-// ------------------------------------------------------------------ Drive
-
-/**
- * Liste des fichiers du Drive.
- *
- * L'API Google Drive est limitée en requêtes par minute : lister les ~960
- * fichiers à chaque démarrage saturait le quota et rendait le serveur
- * muet. La liste est donc mise en cache sur disque une heure, et l'ancien
- * cache est conservé en cas d'échec.
- */
 const DRIVE_CACHE_FILE = path.join(DATA_DIR, "drive-listing.json")
 const DRIVE_CACHE_TTL = 1000 * 60 * 60
 
-/**
- * Racines de lecture : un dossier peut porter un nom ambigu.
- *
- * Sur le Drive, il existe DEUX dossiers « France ». Un chemin par nom est
- * donc ambigu : rclone résout « France » vers le mauvais (2 fichiers), et
- * les 523 autres deviennent introuvables — d'où les « lectures impossibles ».
- *
- * Chaque racine est donc identifiee par son ID, et l'index retient la racine
- * qui sert chaque fichier.
- */
 const ROOTS = new Map()
 
-/** Racine principale : le dossier Notube, par son chemin. */
 const ROOT_MAIN = "main"
 
 function rootFor(spec) {
@@ -171,17 +129,10 @@ async function lsjson(path, rootFolderId) {
   }
 }
 
-/**
- * Liste le contenu du Drive en distinguant les dossiers de même nom.
- * Chaque fichier reçoit `driveRoot` (la racine qui le sert) et `driveUrl`
- * (son chemin HTTP relatif à cette racine).
- */
 async function listDrive() {
   try {
     const cached = JSON.parse(await fsp.readFile(DRIVE_CACHE_FILE, "utf8"))
     if (Date.now() - (cached.at ?? 0) < DRIVE_CACHE_TTL && Array.isArray(cached.files)) {
-      // Les racines sont mises en cache avec la liste : sans elles, le
-      // service ne saurait pas quel serveur rclone lire.
       for (const spec of cached.roots ?? []) {
         const root = rootFor(spec.spec)
         root.rclonePath = spec.rclonePath
@@ -202,7 +153,6 @@ async function listDrive() {
     const target = root.rootFolderId ? root.rclonePath : `${root.rclonePath}/${prefix}`
     const entries = await lsjson(target, root.rootFolderId)
 
-    // Dossiers de même nom : on les distingue par leur ID.
     const byName = new Map()
     for (const entry of entries) {
       if (!entry.IsDir) continue
@@ -233,10 +183,8 @@ async function listDrive() {
     for (const [name, list] of byName) {
       for (const dir of list) {
         if (list.length === 1) {
-          // Nom unique : le chemin par nom suffit.
           await walk(spec, prefix ? `${prefix}/${name}` : name, depth + 1)
         } else {
-          // Nom ambigu : on passe par l'ID du dossier.
           const childSpec = `f-${dir.ID}`
           const childRoot = rootFor(childSpec)
           childRoot.rclonePath = "gdrive:"
@@ -266,9 +214,6 @@ async function listDrive() {
   return files
 }
 
-// ------------------------------------------------------------------ construction
-
-/** Identifiant canonique d'un morceau : l'identifiant de la vidéo YouTube. */
 function videoIdFrom(url, filename, fallback) {
   const fromUrl = String(url || "").match(/[?&]v=([\w-]+)/)?.[1]
   if (fromUrl) return fromUrl
@@ -290,9 +235,6 @@ async function buildIndex() {
     if (!track.title && !track.artist) return
     const existing = tracks.get(track.id)
     if (existing) {
-      // Une valeur vide ne doit jamais écraser une information déjà connue :
-      // l'URL YouTube, l'artiste, la pochette… Le fusionnement se fait donc
-      // en ignorant les champs vides.
       for (const [key, value] of Object.entries(track)) {
         if (value === "" || value === null || value === undefined) continue
         existing[key] = value
@@ -302,7 +244,6 @@ async function buildIndex() {
     tracks.set(track.id, track)
   }
 
-  // 1. Catalogue (propositions)
   let catalogCount = 0
   for (const name of ["urls_france.csv", "urls_international.csv"]) {
     const rows = await readCatalogCsv(path.join(NOTUBE_DIR, name))
@@ -328,17 +269,12 @@ async function buildIndex() {
   }
   sources.catalog = catalogCount
 
-  // 2. Fichiers du Drive
-  //    La liste est connue avant le journal d'état : un dossier peut porter
-  //    un nom ambigu (« France »), et il faut le chemin exact (dossier par
-  //    son ID) pour un morceau téléchargé.
   const driveFiles = await listDrive()
   const driveByName = new Map()
   for (const file of driveFiles) {
     driveByName.set(file.Name, file)
   }
 
-  // 3. État des téléchargements
   let downloadedCount = 0
   for (const lot of ["dl_france", "dl_international"]) {
     const state = await fsp
@@ -350,17 +286,10 @@ async function buildIndex() {
       if (item.status !== "done") continue
       const base = path.basename(item.file || "")
       const title = base.replace(/\s*\[[\w-]+\]\s*\.[a-z0-9]+$/i, "").replace(/\.[a-z0-9]+$/i, "")
-      // La clé du journal n'est pas l'identifiant de la vidéo : on le
-      // déduit de l'URL, sinon le même morceau existe en double (une
-      // entrée Drive sans accès disque, une entrée locale).
       const videoId = videoIdFrom(item.url, base, stateKey)
-      // Le chemin HTTP du serveur rclone se déduit du chemin rclone : le
-      // préfixe du distant (« gdrive:Notube ») devient la racine du serveur.
       const driveRelative = item.drive
         ? String(item.drive).replace(/^[^:]+:[^/]*\/?/, "")
         : null
-      // Le dossier peut porter un nom ambigu (« France ») : on récupère le
-      // chemin exact (dossier par son ID) depuis la liste du Drive.
       const driveEntry = driveByName.get(path.basename(base))
       add({
         id: trackId(videoId),
@@ -387,7 +316,6 @@ async function buildIndex() {
   }
   sources.downloaded = downloadedCount
 
-  // 4. Fichiers présents sur le Drive
   for (const file of driveFiles) {
     const name = path.basename(file.Path || "")
     const title = stripDecorations(name.replace(/\.[a-z0-9]+$/i, ""))
@@ -413,7 +341,6 @@ async function buildIndex() {
   }
   sources.drive = driveFiles.length
 
-  // 5. Fichiers locaux des téléchargements en cours
   for (const lot of ["dl_france", "dl_international"]) {
     const dir = path.join(NOTUBE_DIR, lot)
     const names = await fsp.readdir(dir).catch(() => [])
@@ -442,7 +369,6 @@ async function buildIndex() {
     }
   }
 
-  // 5. Téléchargements à la demande
   const onDemandDir = path.join(DATA_DIR, "downloads")
   const onDemand = await fsp.readdir(onDemandDir).catch(() => [])
   for (const name of onDemand) {
@@ -473,9 +399,6 @@ async function buildIndex() {
     track.searchTokens = [...new Set([...tokenize(track.title), ...tokenize(track.artist)])]
   }
 
-  // Index inversé : jeton → morceaux. Sans lui, une recherche compare
-  // chaque requête à tous les morceaux (et le calcul de similarité
-  // prenait plus d'une seconde).
   const inverted = new Map()
   for (const track of list) {
     for (const token of track.searchTokens) {
@@ -502,7 +425,6 @@ async function buildIndex() {
   return index
 }
 
-/** Construit l'index (une seule fois à la fois). */
 async function ensureIndex({ force = false } = {}) {
   if (!force && index.tracks.length > 0) return index
   if (!building) {
@@ -519,8 +441,6 @@ async function loadFromDisk() {
     const parsed = JSON.parse(raw)
     if (Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
       index = { tracks: parsed.tracks, builtAt: parsed.builtAt || 0, sources: parsed.sources || {} }
-      // L'index inversé se reconstruit en mémoire : c'est une simple boucle,
-      // sans I/O, et la recherche est ainsi instantanée dès le démarrage.
       buildLookupMaps()
       return true
     }
@@ -530,7 +450,6 @@ async function loadFromDisk() {
   return false
 }
 
-/** Construit les tables de correspondance (par id et inversée par jeton). */
 function buildLookupMaps() {
   index.byId = new Map(index.tracks.map(track => [track.id, track]))
   const inverted = new Map()
@@ -559,13 +478,6 @@ function getTrack(id) {
   return index.tracks.find(track => track.id === id) || null
 }
 
-// ------------------------------------------------------------------ recherche
-
-/**
- * Score d'un morceau pour une requête.
- * Un titre exact (après nettoyage) ou un artiste exact domine tout ;
- * sinon on cumule les jetons communs et la similarité de Levenshtein.
- */
 function scoreTrack(track, query, tokens) {
   const title = normalize(track.title)
   const artist = normalize(track.artist)
@@ -599,17 +511,11 @@ function scoreTrack(track, query, tokens) {
       }
     }
   }
-  // Les titres du catalogue ont un rang : les mieux classés d'abord.
   if (track.rank) score += Math.max(0, 20 - track.rank / 50)
   if (track.available) score += 5
   return score
 }
 
-/**
- * Recherche dans l'index, via l'index inversé : on ne regarde que les
- * morceaux contenant au moins un jeton de la requête. Sur 2 700 morceaux,
- * la réponse tombe sous les 10 ms.
- */
 function search(query, limit = 60) {
   const cleaned = normalize(query)
   if (cleaned.length < 2) return []
@@ -619,7 +525,6 @@ function search(query, limit = 60) {
 
   const inverted = index.inverted
   if (!inverted) {
-    // Index pas encore construit : recherche exhaustive (lente mais correcte).
     const results = []
     for (const track of index.tracks) {
       const score = scoreTrack(track, cleaned, tokens)
@@ -629,10 +534,6 @@ function search(query, limit = 60) {
     return results.slice(0, limit)
   }
 
-  // Candidats : union des morceaux contenant un jeton proche d'un jeton
-  // de la requête. Les correspondances partielles ne sont retenues qu'au
-  //-delà de 3 caractères : sinon un jeton d'une lettre (« g ») ferait
-  // correspondre la moitié de l'index.
   const candidates = new Set()
   for (const token of tokens) {
     for (const [known, ids] of inverted) {
@@ -655,8 +556,6 @@ function search(query, limit = 60) {
     const track = index.byId ? index.byId.get(id) : index.tracks.find(item => item.id === id)
     if (!track) continue
     const score = scoreTrack(track, cleaned, tokens)
-    // On ne renvoie que les champs utiles : la réponse doit rester légère
-    // pour que la recherche soit instantanée côté interface.
     if (score > 0) {
       results.push({
         id: track.id,
@@ -679,8 +578,6 @@ function search(query, limit = 60) {
   return results.slice(0, limit)
 }
 
-// ------------------------------------------------------------------ YouTube
-
 const youtubeCache = new Map()
 const YOUTUBE_CACHE_FILE = path.join(DATA_DIR, "youtube-search-cache.json")
 
@@ -702,7 +599,6 @@ function saveYoutubeCache() {
   fs.writeFile(YOUTUBE_CACHE_FILE, JSON.stringify(fresh), () => undefined)
 }
 
-/** Recherche YouTube via le binaire yt-dlp déjà présent sur la machine. */
 async function searchYoutube(query, limit = 12) {
   const key = normalize(query)
   const cached = youtubeCache.get(key)

@@ -22,7 +22,7 @@ driver.set_window_size(1280, 800)
 try:
     driver.get(BASE)
     time.sleep(2)
-    # Le thème est mémorisé : on repart d'un état connu.
+
     driver.execute_script("localStorage.setItem('vitrail_theme_v1', 'dark')")
     driver.get(BASE)
     time.sleep(4)
@@ -31,7 +31,6 @@ try:
     driver.save_screenshot(str(OUT / "theme-1-sombre.png"))
     print("  -> theme-1-sombre.png", flush=True)
 
-    # Bascule en clair via le bouton de thème.
     for element in driver.find_elements(By.CSS_SELECTOR, 'button[aria-label*="thème clair"]'):
         driver.execute_script("arguments[0].click();", element)
         break
@@ -42,7 +41,6 @@ try:
     is_light = driver.execute_script("return document.documentElement.classList.contains('light')")
     print("  classe light appliquée :", is_light, flush=True)
 
-    # Lecteur en clair
     for element in driver.find_elements(By.CSS_SELECTOR, "button"):
         if "Let It In" in (element.text or ""):
             driver.execute_script("arguments[0].click();", element)

@@ -21,17 +21,14 @@ driver.set_window_size(1280, 800)
 
 results = []
 
-
 def check(name, ok, detail=""):
     results.append((name, bool(ok), detail))
     print(f"  [{'OK ' if ok else 'KO '}] {name} {detail}", flush=True)
-
 
 try:
     driver.get(BASE)
     time.sleep(5)
 
-    # --- recherche -------------------------------------------------------
     boxes = driver.find_elements(By.CSS_SELECTOR, 'input[type="search"]')
     check("champ de recherche présent", len(boxes) > 0, f"({len(boxes)})")
     box = boxes[0]
@@ -49,18 +46,14 @@ try:
     print("      " + "\n      ".join(titles[:4]), flush=True)
     driver.save_screenshot(str(OUT / "cat-1-recherche.png"))
 
-    # --- pochettes -------------------------------------------------------
     images = driver.find_elements(By.CSS_SELECTOR, "ul li img")
     with_art = [img for img in images if img.get_attribute("src") and "mzstatic" in (img.get_attribute("src") or "")]
     check("pochettes trouvées", len(with_art) > 0, f"{len(with_art)} pochettes iTunes")
 
-    # --- lecture ---------------------------------------------------------
-    # On joue un morceau DÉJÀ présent (pas une proposition à télécharger).
     clicked = False
     for row in driver.find_elements(By.CSS_SELECTOR, "ul li"):
         buttons = row.find_elements(By.CSS_SELECTOR, "button")
-        # Un morceau deja disponible n'a qu'un bouton (ecouter) ; une
-        # proposition a en plus un bouton « Telecharger ».
+
         if len(buttons) != 1:
             continue
         driver.execute_script("arguments[0].click();", buttons[0])

@@ -13,10 +13,6 @@ function toSeconds(min: string, sec: string, frac?: string): number {
   return m * 60 + s + fraction
 }
 
-/**
- * Parse du LRC simple (une ligne = un horodatage) ou enrichi (timestamps mot à mot
- * entre chevrons, produit par LRCLIB pour certains morceaux).
- */
 export function parseLrc(raw: string): LyricLine[] {
   const lines: LyricLine[] = []
 
@@ -72,7 +68,6 @@ export function parseLrc(raw: string): LyricLine[] {
   return lines
 }
 
-/** Index de la ligne active pour un temps donné, ou -1 avant la première. */
 export function activeLineIndex(lines: LyricLine[], time: number): number {
   if (lines.length === 0) return -1
   if (time < (lines[0]?.time ?? 0)) return -1

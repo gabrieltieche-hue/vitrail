@@ -1,14 +1,3 @@
-/**
- * Enrichissement des métadonnées : pochettes et durées exactes.
- *
- * L'API publique iTunes (aucune clé, aucun compte) rend la pochette et la
- * durée d'un morceau à partir de l'artiste et du titre. Les résultats sont
- * mis en cache sur disque : chaque morceau n'est donc interrogé qu'une fois.
- *
- * L'enrichissement tourne en tâche de fond, par lots, sans jamais bloquer
- * la recherche ni la lecture.
- */
-
 const fs = require("node:fs")
 const fsp = require("node:fs/promises")
 const path = require("node:path")
@@ -39,7 +28,6 @@ function keyFor(track) {
   return `${(track.artist || "").toLowerCase()}|${(track.title || "").toLowerCase()}`
 }
 
-/** Artwork en plus grand : l'API renvoie 100x100, on demande 600x600. */
 function upscale(url) {
   return url ? url.replace("/100x100bb", "/600x600bb") : ""
 }
@@ -60,7 +48,6 @@ async function query(track) {
     const results = Array.isArray(data.results) ? data.results : []
     if (results.length === 0) return null
 
-    // On privilégie le résultat dont le titre ressemble le plus.
     const wanted = title.toLowerCase()
     const best =
       results.find(item => (item.trackName || "").toLowerCase() === wanted) || results[0]
@@ -87,10 +74,6 @@ async function lookup(track) {
   return result
 }
 
-/**
- * Enrichit un lot de morceaux et renvoie les champs complétés.
- * Appelé en tâche de fond, jamais dans le chemin d'une requête.
- */
 async function enrich(tracks, limit = 60) {
   const enriched = []
   for (const track of tracks) {
@@ -109,7 +92,6 @@ async function enrich(tracks, limit = 60) {
   return enriched
 }
 
-/** Enrichit progressivement l'index, par petits lots. */
 function startBackgroundEnrichment(getTracks, onUpdated) {
   let running = false
   const tick = async () => {
@@ -118,8 +100,6 @@ function startBackgroundEnrichment(getTracks, onUpdated) {
     try {
       const tracks = getTracks().filter(track => !track.artwork)
       if (tracks.length > 0) {
-        // L'API iTunes tolère un débit modéré : 60 pochettes toutes les
-        // 10 s remplit le catalogue en quelques minutes.
         const updated = await enrich(tracks.slice(0, 60))
         if (updated.length > 0) onUpdated(updated)
       }

@@ -1,4 +1,3 @@
-/* Vitrail — service worker minimal : coquille applicative en cache. */
 const CACHE = "vitrail-v1"
 const SHELL = ["/", "/index.html", "/manifest.webmanifest", "/icon.svg"]
 
@@ -27,8 +26,6 @@ self.addEventListener("fetch", event => {
 
   const url = new URL(request.url)
 
-  // L'audio et les paroles vont toujours au réseau : un cache audio périmé
-  // donnerait un son faux. On ne les met pas en cache.
   if (url.pathname.includes("/audio") || url.hostname.includes("lrclib.net")) return
   if (url.hostname.includes("archive.org")) return
 

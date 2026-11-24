@@ -33,7 +33,7 @@ try:
             driver.execute_script("arguments[0].click();", element)
             break
     time.sleep(5)
-    # Si le lecteur n'est pas ouvert, on l'ouvre via la carte « En cours ».
+
     opened = driver.execute_script(
         """
         const section = document.querySelector('section.fixed.inset-0.z-40');

@@ -1,17 +1,4 @@
 #!/usr/bin/env node
-/**
- * Vitrail — service local de la famille.
- *
- * Rôle (sans Spotify, tout local) :
- *   1. Bibliothèque partagée : un appareil importe des fichiers, les téléverse
- *      ici, et tout le monde peut les jouer.
- *   2. Transcription : les paroles des morceaux que personne ne connaît sont
- *      calculées ici (whisper.cpp) et mises en cache.
- *   3. File d'attente partagée : la file de la famille, en temps réel.
- *   4. Statistiques : base des capsules d'écoute.
- *
- * Zéro dépendance : uniquement le module `http` de Node.
- */
 
 const http = require("node:http")
 const fs = require("node:fs")
@@ -26,7 +13,6 @@ const downloads = require("./downloads")
 const artwork = require("./artwork")
 const streamUrl = require("./streamUrl")
 
-
 const PORT = Number(process.env.VITRAIL_PORT || 8099)
 const DATA_DIR = process.env.VITRAIL_DATA || "/root/vitrail-data"
 const DIST_DIR = process.env.VITRAIL_DIST || "/root/vitrail/dist"
@@ -34,10 +20,8 @@ const WHISPER_BIN = process.env.VITRAIL_WHISPER || "/root/whisper.cpp/build/bin/
 const WHISPER_MODEL = process.env.VITRAIL_MODEL || "/root/models/ggml-base.bin"
 const WHISPER_LIB_DIR = path.dirname(WHISPER_BIN)
 const WHISPER_THREADS = Number(process.env.VITRAIL_THREADS || 2)
-/** Blocs traités en parallèle. */
 const CONCURRENCY = Number(process.env.VITRAIL_CONCURRENCY || 4)
 
-/** Exécute `task` sur chaque élément, au plus `limit` à la fois. */
 async function mapWithConcurrency(items, limit, task) {
   const results = new Array(items.length)
   let cursor = 0
@@ -61,8 +45,6 @@ const QUEUE_FILE = path.join(DATA_DIR, "queue.json")
 const STATS_FILE = path.join(DATA_DIR, "stats.json")
 
 for (const dir of [DATA_DIR, LIB_DIR, LYRIC_DIR, TRANSCRIPT_DIR, TMP_DIR]) fs.mkdirSync(dir, { recursive: true })
-
-// ---------------------------------------------------------------- utilitaires
 
 function json(res, code, payload) {
   const body = JSON.stringify(payload)
@@ -122,8 +104,6 @@ function readMetadata(req) {
   }
 }
 
-// ------------------------------------------------------------------库里 library
-
 async function listLibrary() {
   const files = await fsp.readdir(LIB_DIR).catch(() => [])
   const items = []
@@ -148,13 +128,10 @@ async function deleteLibraryItem(id) {
   await fsp.unlink(path.join(LYRIC_DIR, `${id}.json`)).catch(() => {})
 }
 
-// ------------------------------------------------------------------ transcription
-
 function hasWhisper() {
   return fs.existsSync(WHISPER_BIN) && fs.existsSync(WHISPER_MODEL)
 }
 
-/** Convertit n'importe quel format audio en WAV 16 kHz mono. */
 function toWav16k(input, output) {
   return new Promise((resolve, reject) => {
     const child = spawn(FFMPEG, [
@@ -181,15 +158,6 @@ function toWav16k(input, output) {
   })
 }
 
-/**
- * Découpe l'audio en blocs de 28 s avec 2 s de chevauchement.
- *
- *.whisper.cpp traite le fichier en fenêtres de 30 s avec un contexte glissant :
- * dès qu'un jeton « musique » apparaît, le modèle contamine toutes les
- * fenêtres suivantes et ne transcrit plus rien. En découpant nous-mêmes et en
- * relançant whisper sur chaque bloc, chaque bloc est traité à froid — et le
- * texte est complet.
- */
 const CHUNK_LENGTH = 28
 const CHUNK_STEP = 26
 
@@ -219,14 +187,6 @@ async function splitIntoChunks(wavPath) {
   return { chunks, directory }
 }
 
-/**
- * Durée d'un WAV, en parcourant les chunks.
- *
- * ffmpeg insère un chunk LIST (métadonnées) avant le chunk data : la taille
- * des données n'est donc PAS à l'octet 40. Une lecture à l'offset fixe
- * renvoyait 160 octets au lieu de 6 Mo — et le découpage en blocs s'arrêtait
- * au premier.
- */
 function durationOf(file) {
   let header
   try {
@@ -251,7 +211,6 @@ function durationOf(file) {
       dataSize = size
       break
     }
-    // Les chunks sont alignés sur des mots de 2 octets.
     offset += 8 + size + (size % 2)
   }
   return byteRate > 0 ? dataSize / byteRate : 0
@@ -283,7 +242,6 @@ function runFfmpegExtract(input, output, start, length) {
   })
 }
 
-/** Lance whisper.cpp sur un bloc et renvoie les mots (un segment par mot). */
 function runWhisper(wavPath, language, threads) {
   return new Promise((resolve, reject) => {
     const outBase = wavPath.replace(/\.wav$/, "")
@@ -301,10 +259,6 @@ function runWhisper(wavPath, language, threads) {
       "-nt",
       "-t",
       String(threads || WHISPER_THREADS),
-      // « best of 1 » : pas d'échantillonnage, on garde la recherche à
-      // faisceaux (qui produit des horodatages justes). Surtout, ne PAS
-      // utiliser -bs 1 : le décodage glouton décale tous les horodatages
-      // d'une valeur négative (−979 s observés), ce qui casse la synchro.
       "-bo",
       "1",
     ]
@@ -336,11 +290,9 @@ function runWhisper(wavPath, language, threads) {
   })
 }
 
-/** Jetons non chantés : [Musique], *musique*, ♪, (musique)… */
 const NON_VOCAL = /^[*[\]()].*[*[\]()]$/
 const SYMBOL_ONLY = /^[^\p{L}\p{N}]+$/u
 
-/** Supprime les répétitions caractéristiques des hallucinations de whisper. */
 function dropHallucinations(words) {
   const cleaned = words.filter(word => {
     if (!word.text) return false
@@ -352,7 +304,6 @@ function dropHallucinations(words) {
     return true
   })
 
-  // Un même mot répété plus de 3 fois d'affilée est une hallucination.
   const result = []
   let run = 0
   let previous = ""
@@ -369,7 +320,6 @@ function dropHallucinations(words) {
   return result
 }
 
-/** Regroupe les mots en lignes cohérentes (≈ 8 mots ou 6 s). */
 function groupIntoLines(words) {
   const lines = []
   let current = []
@@ -402,7 +352,6 @@ function groupIntoLines(words) {
 
 const jobs = new Map()
 
-/** Détecte la langue une seule fois (par blocs), pour garder un résultat cohérent. */
 function detectLanguage(wavPath) {
   return new Promise(resolve => {
     const child = spawn(WHISPER_BIN, ["-m", WHISPER_MODEL, "-f", wavPath, "-dl"], {
@@ -418,7 +367,6 @@ function detectLanguage(wavPath) {
   })
 }
 
-/** Transcrit un fichier audio arbitraire et renvoie les lignes synchronisées. */
 async function transcribeBuffer(source, id, language) {
   const stamp = `${Date.now()}-${crypto.randomBytes(3).toString("hex")}`
   const wav = path.join(TMP_DIR, `${stamp}.wav`)
@@ -435,9 +383,6 @@ async function transcribeBuffer(source, id, language) {
     const all = []
     let lastEnd = -1
 
-    // Les blocs sont traités en parallèle : sur ce CPU (8 cœurs), whisper
-    // sur un seul bloc n'exploite pas tous les cœurs, et trois blocs à deux
-    // threads vont plus vite qu'un bloc à six threads, en série.
     const results = await mapWithConcurrency(chunks, CONCURRENCY, async chunk => {
       try {
         const raw = await runWhisper(chunk.path, useLanguage, WHISPER_THREADS)
@@ -453,9 +398,6 @@ async function transcribeBuffer(source, id, language) {
 
     for (const { chunk, words } of results) {
       for (const word of words) {
-        // Garde-fou : whisper peut renvoyer des horodatages négatifs ou
-        // aberrants. Un mot sans position exploitable est écarté plutôt que
-        // mal synchronisé.
         if (!Number.isFinite(word.start) || !Number.isFinite(word.end)) continue
         if (word.start < 0 || word.end < 0) continue
         if (word.end > CHUNK_LENGTH + 2) continue
@@ -464,7 +406,6 @@ async function transcribeBuffer(source, id, language) {
           end: chunk.start + word.end,
           text: word.text,
         }
-        // Le chevauchement de 2 s entre blocs : on écarte les doublons.
         if (absolute.start < lastEnd - 0.2) continue
         all.push(absolute)
         lastEnd = Math.max(lastEnd, absolute.end)
@@ -507,8 +448,6 @@ async function transcribeItem(id, language) {
   return promise
 }
 
-// ------------------------------------------------------------------ file d'attente
-
 function readQueue() {
   return readJson(QUEUE_FILE, { items: [], now: null, updatedAt: 0 })
 }
@@ -519,8 +458,6 @@ function writeQueue(queue) {
   return queue
 }
 
-// ------------------------------------------------------------------ statistiques
-
 function readStats() {
   return readJson(STATS_FILE, { plays: [] })
 }
@@ -529,8 +466,6 @@ function writeStats(stats) {
   writeJson(STATS_FILE, stats)
   return stats
 }
-
-// ------------------------------------------------------------------ serveur
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`)
@@ -547,21 +482,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    // Tout ce qui n'est pas une API est l'application elle-même.
     if (!route.startsWith("/api/")) {
       await serveStatic(req, res, route)
       return
     }
 
-    // -- recherche dans l'index local ------------------------------------
     if (route === "/api/library/search" && req.method === "GET") {
       await library.ensureIndex()
       const query = url.searchParams.get("q") || ""
       const limit = Math.min(200, Number(url.searchParams.get("limit")) || 60)
       const results = library.search(query, limit)
       json(res, 200, { query, results })
-      // On pré-résout les URL des premiers résultats : la lecture sera
-      // instantanée au moment de cliquer.
       void streamUrl.prefetch(
         results.filter(result => result.url).slice(0, 8).map(result => result.url),
       )
@@ -569,7 +500,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (route === "/api/library/lookup" && req.method === "GET") {
-      // Pochette et durée exacte pour un morceau (API iTunes, mise en cache).
       const title = url.searchParams.get("title") || ""
       const artist = url.searchParams.get("artist") || ""
       const result = await artwork.lookup({ title, artist })
@@ -606,9 +536,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // -- flux audio -------------------------------------------------------
-    // Le service ne copie rien : il relaie les requêtes Range vers la
-    // source (disque local ou Drive via rclone). La RAM ne bouge pas.
     const streamMatch = route.match(/^\/api\/stream\/(.+)$/)
     if (streamMatch && req.method === "GET") {
       await library.ensureIndex()
@@ -617,13 +544,10 @@ const server = http.createServer(async (req, res) => {
         json(res, 404, { error: "Morceau introuvable" })
         return
       }
-      // 1. Un fichier vraiment présent sur la machine.
       if (track.localPath && fs.existsSync(track.localPath)) {
         await streamLocalFile(req, res, track.localPath, mimeFor(track.localPath))
         return
       }
-      // 2. Le flux audio officiel, lu sur le CDN : rien n'est stocké, rien
-      //    n'est envoyé sur le Drive, et le seek est instantané.
       if (track.url) {
         const direct = await streamUrl.resolveAudioUrl(track.url, {
           force: url.searchParams.get("fresh") === "1",
@@ -638,7 +562,6 @@ const server = http.createServer(async (req, res) => {
           return
         }
       }
-      // 3. En dernier recours : le fichier déjà sur le Drive.
       if (track.driveRemote) {
         await streamFromDrive(req, res, track.driveRemote, track.localPath)
         return
@@ -647,7 +570,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // -- téléchargements ---------------------------------------------------
     if (route === "/api/jobs" && req.method === "GET") {
       json(res, 200, { jobs: downloads.listJobs() })
       return
@@ -670,7 +592,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // -- santé ------------------------------------------------------------
     if (route === "/api/health") {
       const items = await listLibrary()
       json(res, 200, {
@@ -683,7 +604,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // -- bibliothèque -----------------------------------------------------
     if (route === "/api/library" && req.method === "GET") {
       json(res, 200, { items: await listLibrary() })
       return
@@ -763,10 +683,6 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // -- transcription par empreinte -------------------------------------
-    // L'empreinte du fichier (SHA-256 calculé par le navigateur) permet de
-    // partager les paroles : si un membre de la famille a déjà fait
-    // transcrire un morceau, tous en profitent.
     const transcriptMatch = route.match(/^\/api\/transcript\/([\w-]+)$/)
     if (transcriptMatch) {
       const hash = transcriptMatch[1]
@@ -797,14 +713,10 @@ const server = http.createServer(async (req, res) => {
         }
         const source = path.join(TMP_DIR, `${hash}.bin`)
         await fsp.writeFile(source, body)
-        // La transcription prend plusieurs minutes : on la lance en tâche de
-        // fond et le client vient interroger l'empreinte toutes les 5 s.
         const language = meta.language || "auto"
         transcribeBuffer(source, hash, language)
           .then(transcript => {
             if (!transcript.lines.length) {
-              // Un transcript vide ne doit pas être mis en cache : le
-              // navigateur le récupérerait définitivement, sans paroles.
               console.error(`[vitrail] transcription ${hash} : aucun texte reconnu`)
               return
             }
@@ -822,7 +734,6 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // -- file d'attente partagée -----------------------------------------
     if (route === "/api/queue" && req.method === "GET") {
       json(res, 200, readQueue())
       return
@@ -863,7 +774,6 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    // -- statistiques -----------------------------------------------------
     if (route === "/api/stats" && req.method === "GET") {
       json(res, 200, summarise(readStats()))
       return
@@ -884,7 +794,6 @@ const server = http.createServer(async (req, res) => {
           at: Date.now(),
           device: play.device ?? "",
         })
-        // On ne garde que les 5000 derniers événements.
         if (stats.plays.length > 5000) stats.plays = stats.plays.slice(-5000)
       }
       json(res, 200, summarise(writeStats(stats)))
@@ -897,13 +806,6 @@ const server = http.createServer(async (req, res) => {
   }
 })
 
-/**
- * L'application est servie par le service local, et non seulement depuis
- * Vercel. Raison : une page HTTPS ne peut pas appeler une API HTTP locale
- * (mixed content bloqué par le navigateur). En servant l'app et l'API depuis
- * la même origine, les paroles transcrites et la file de la famille
- * fonctionnent — sur la tablette comme sur les autres appareils du réseau.
- */
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -951,7 +853,6 @@ function mimeFor(file) {
   return "audio/mpeg"
 }
 
-/** Relit un fichier local en gérant les requêtes Range (lecture à la volée). */
 async function streamLocalFile(req, res, file, contentType) {
   const stat = await fsp.stat(file)
   const range = req.headers.range
@@ -982,14 +883,6 @@ async function streamLocalFile(req, res, file, contentType) {
   fs.createReadStream(file).pipe(res)
 }
 
-/**
- * Encodage strict d'un segment de chemin.
- *
- * `encodeURIComponent` laisse l'apostrophe et les parenthèses tels quels :
- * `Céline Dion - Pour que tu m'aimes encore (Vidéo...)` partait avec des
- * `'` et des `(`, et rclone répondait 404. On encode tout ce qui doit
- * l'être.
- */
 function encodeSegment(segment) {
   return encodeURIComponent(segment).replace(
     /[!'()*]/g,
@@ -997,25 +890,6 @@ function encodeSegment(segment) {
   )
 }
 
-/**
- * Relit un fichier du Google Drive.
- *
- * Deux chemins :
- *  1. le serveur HTTP de rclone (rapide, et son cache disque évite de
- *     réinterroger le Drive) ;
- *  2. `rclone cat` en repli : le cache de répertoire de rclone peut être
- *     périmé (le fichier a été téléversé récemment), et la lecture directe
- *     n'en dépend pas — mais elle est nettement plus lente.
- *
- * Dans les deux cas, le flux traverse le service sans être copié.
- */
-/**
- * En dernier recours : lecture d'un fichier deja sur le Drive.
- *
- * On passe par `rclone cat` avec le chemin du dossier PAR SON ID : le Drive
- * porte deux dossiers du meme nom (« France »), et un chemin par nom est
- * donc ambigu — c'est ce qui rendait les fichiers introuvables.
- */
 async function streamFromDrive(req, res, driveRemote, localFallback) {
   if (localFallback && fs.existsSync(localFallback)) {
     await streamLocalFile(req, res, localFallback, mimeFor(localFallback))
@@ -1137,18 +1011,11 @@ function lanAddress() {
   return null
 }
 
-/**
- * Le contenu du Google Drive est servi par rclone, qui gère les requêtes
- * Range et un cache disque borné (200 Mo) : la lecture est instantanée et
- * la RAM de la tablette ne bouge pas.
- */
 let rcloneProcess = null
 let spawnedDrive = false
 
 function startDriveServer() {
   if (rcloneProcess) return
-  // Un serveur rclone qui tourne déjà (relance du service) est réutilisé
-  // tel quel : sinon le nouveau se heurte au port occupé.
   const probe = require("node:http").get(`${library.DRIVE_SERVE}/`, response => {
     response.resume()
     console.log("[vitrail] serveur Drive déjà en place, réutilisé")
@@ -1179,7 +1046,6 @@ function spawnDrive() {
     "128M",
     "--dir-cache-time",
     "30m",
-    // L'API Drive est limitée en requêtes par minute : on reste poli.
     "--tpslimit",
     "4",
     "--tpslimit-burst",
@@ -1195,8 +1061,6 @@ function spawnDrive() {
     rcloneProcess = null
     spawnedDrive = false
     console.error(`[vitrail] rclone serve s'est arrêté (code ${code}) : ${stderr}`)
-    // On le relance : le Drive est la source de vérité de la bibliothèque,
-    // il doit toujours répondre.
     setTimeout(startDriveServer, 8000)
   })
 }
@@ -1209,14 +1073,9 @@ if (!isCli) {
     console.log(`[vitrail] 127.0.0.1:${PORT} · ${lanAddress() ?? "?"}:${PORT}`)
     console.log(`[vitrail] whisper.cpp ${hasWhisper() ? "disponible" : "ABSENT"}`)
     startDriveServer()
-    // L'index est chargé depuis le disque (démarrage instantané) puis
-    // reconstruit en arrière-plan pour rester à jour. Cette construction
-    // relapse le Drive : le serveur rclone demarre ensuite sur un cache
-    // deja chaud, et repond tout de suite.
     void library.loadFromDisk().then(() => {
       void library.ensureIndex({ force: true }).then(() => startDriveServer())
     })
-    // Les pochettes et les durées exactes se complètent en tâche de fond.
     artwork.startBackgroundEnrichment(
       () => library.getIndex().tracks,
       updated => {
@@ -1233,7 +1092,6 @@ if (!isCli) {
   })
 }
 
-// Mode ligne de commande : node server.js --transcribe <fichier> [langue]
 if (isCli) {
   const file = process.argv[3]
   const language = process.argv[4] || "auto"

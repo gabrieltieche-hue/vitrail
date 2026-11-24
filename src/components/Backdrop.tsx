@@ -5,11 +5,6 @@ type BackdropProps = {
   className?: string
 }
 
-/**
- * Fond « vitrail » : la pochette, agrandie et floutée, donne sa lumière à
- * l'écran. En thème clair, la même lumière mais attenuee : l'image est
- * delavée pour que le texte reste lisible.
- */
 export function Backdrop({ artwork, className }: BackdropProps) {
   return (
     <div className={clsx("pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-canvas", className)}>

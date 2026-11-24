@@ -1,9 +1,3 @@
-/**
- * Bibliothèque personnelle : les fichiers importés par l'utilisateur sont stockés
- * dans IndexedDB (IndexedDB uniquement — localStorage est plafonné à ~5 Mo et
- * n'accepte que des chaînes).
- */
-
 import { readTags } from "@/lib/id3"
 import type { Track } from "@/lib/types"
 
@@ -100,7 +94,6 @@ async function readDuration(blob: Blob): Promise<number> {
       audio.src = url
     })
   } finally {
-    // Le blob reste en mémoire : on ne révoque l'URL qu'après la lecture.
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 }
@@ -111,10 +104,6 @@ export type ImportResult = {
   totalBytes: number
 }
 
-/**
- * Empreinte du contenu du fichier. Deux appareils qui ont le même morceau
- * obtiennent la même empreinte, donc les mêmes paroles transcrites.
- */
 export async function hashFile(file: Blob): Promise<string | null> {
   try {
     const buffer = await file.arrayBuffer()
@@ -216,11 +205,6 @@ async function collectFiles(handle: DirectoryHandle, depth = 0): Promise<File[]>
   return files
 }
 
-/**
- * Ouvre le sélecteur de dossier du navigateur (File System Access API).
- * Les fichiers sont lus en place, sans copie : le dossier reste la source
- * de vérité, l'app n'en garde que les métadonnées.
- */
 export async function pickDirectory(): Promise<File[] | null> {
   const picker = (window as unknown as { showDirectoryPicker?: () => Promise<DirectoryHandle> })
     .showDirectoryPicker

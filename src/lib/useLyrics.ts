@@ -3,22 +3,9 @@ import { getTranscript, requestTranscript } from "@/lib/family"
 import { loadLyrics } from "@/lib/lyrics"
 import type { Lyrics, LyricsState, Track } from "@/lib/types"
 
-/**
- * Moteur de paroles.
- *
- * Ordre de recherche :
- *   1. Paroles intégrées au fichier (ID3) — instantanées.
- *   2. Transcription locale (whisper.cpp sur le service familial) — synchronisée
- *      au mot près, disponible pour *n'importe quel* morceau importé.
- *   3. LRCLIB — pour les morceaux connus du catalogue public.
- *
- * La transcription est déclenchée en tâche de fond : l'écran affiche
- * « transcription en cours » puis bascule sur les paroles dès qu'elles sont là.
- */
-
 const TRANSCRIPT_CACHE = "vitrail_transcripts_v1"
 const POLL_INTERVAL = 4000
-const POLL_LIMIT = 240 // ~16 minutes
+const POLL_LIMIT = 240
 
 type Cached = { lines: Lyrics["synced"]; plain: string[] | null; at: number }
 
@@ -90,7 +77,6 @@ export function useLyrics(track: Track | null): LyricsState {
     let cancelled = false
     pollCount.current = 0
 
-    // 1. Paroles intégrées au fichier.
     if (embedded) {
       const lines = embedded
         .split(/\r?\n/)
@@ -104,7 +90,6 @@ export function useLyrics(track: Track | null): LyricsState {
     }
 
     const run = async () => {
-      // 2. LRCLIB : instantané, et parfait quand le morceau est connu.
       setState({ status: "loading" })
       const known = await loadLyrics(track)
       if (cancelled) return
@@ -113,7 +98,6 @@ export function useLyrics(track: Track | null): LyricsState {
         return
       }
 
-      // 3. Transcription locale, par empreinte du fichier.
       if (fileHash) {
         const cached = readCache()[fileHash]
         if (cached) {
@@ -130,10 +114,8 @@ export function useLyrics(track: Track | null): LyricsState {
             setState({ status: "ready", lyrics })
             return
           }
-          // Un transcript vide n'est pas exploitable : on redemande.
         }
 
-        // Pas encore transcrite : on lance le calcul en tâche de fond.
         setState({ status: "transcribing" })
         const blob = await fetch(track.audio).then(response => response.blob()).catch(() => null)
         if (cancelled) return
@@ -147,7 +129,6 @@ export function useLyrics(track: Track | null): LyricsState {
           }
         }
 
-        // On interroge le service jusqu'à ce que la transcription soit prête.
         const timer = window.setInterval(async () => {
           if (cancelled) {
             window.clearInterval(timer)

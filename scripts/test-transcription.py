@@ -27,7 +27,6 @@ service = Service(executable_path="/tmp/opencode/geckodriver")
 driver = webdriver.Firefox(options=options, service=service)
 driver.set_window_size(1280, 800)
 
-
 def lyrics_panel_text():
     return driver.execute_script(
         """
@@ -36,7 +35,6 @@ def lyrics_panel_text():
         """
     )
 
-
 try:
     driver.get(BASE)
     time.sleep(4)
@@ -44,7 +42,6 @@ try:
     inputs[0].send_keys(SAMPLE)
     time.sleep(9)
 
-    # On clique le morceau importé (titre = nom de fichier, sans métadonnées).
     clicked = False
     for element in driver.find_elements(By.CSS_SELECTOR, "button"):
         if "mirage-sans-paroles" in (element.text or "").lower():
